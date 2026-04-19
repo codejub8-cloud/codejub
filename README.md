@@ -20,3 +20,4 @@ I am a third-year Computational Mathematics student with a strong foundation in 
 * **Projects:** Developing scalable web interfaces and working on full-stack projects (e.g., OpenClaw, responsive e-commerce platforms) using React and TypeScript.
 
 
+# Hi 

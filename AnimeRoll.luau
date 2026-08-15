@@ -1653,7 +1653,7 @@ local Config = {
     
     -- Wheel & Popups
     AutoSpinWheel       = false,
-    HideNotifications   = true,
+    HideNotifications   = false,
     
     -- Dashboard & Progression Toggles (Equip, Level, Evolve, Stats)
     AutoEquipBest       = false,
@@ -1694,63 +1694,12 @@ local Config = {
 }
 
 -- ══════════════════════════════════════════════════════════
--- NOTIFICATION BLOCKER & CLEANER ("ป้ายชื่อ" Killer)
+-- SAFE NOTIFICATION HANDLER (Zero Damage to Game UI)
 -- ══════════════════════════════════════════════════════════
 
-local function isNotificationElement(obj)
-    if not obj then return false end
-    local name = obj.Name:lower()
-    local text = (obj:IsA("TextLabel") or obj:IsA("TextButton")) and obj.Text or ""
-    local textLower = text:lower()
-    
-    if text == "Label" or text == "ป้ายชื่อ" or textLower:find("spin") or textLower:find("won") or textLower:find("claim") or textLower:find("gold") then
-        return true
-    end
-    if name:find("notif") or name:find("popup") or name:find("toast") or name:find("banner") or name:find("alert") then
-        return true
-    end
-    return false
-end
-
-local function purgeNotification(obj)
-    if not obj then return end
-    pcall(function()
-        if isNotificationElement(obj) then
-            if obj:IsA("GuiObject") then obj.Visible = false end
-            local parent = obj.Parent
-            if parent and (parent.Name:lower():find("notif") or parent.Name:lower():find("item") or parent:IsA("BillboardGui") or parent:IsA("Frame")) then
-                parent.Visible = false
-                parent:Destroy()
-            else
-                obj:Destroy()
-            end
-        end
-    end)
-end
-
 local function cleanAllExistingNotifications()
-    local pGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not pGui then return end
-    for _, desc in ipairs(pGui:GetDescendants()) do
-        if isNotificationElement(desc) then purgeNotification(desc) end
-    end
+    -- Intentionally non-destructive to preserve all game HUD buttons (Pass, Shop, Upgrades, Gold HUD)
 end
-
-task.spawn(function()
-    local pGui = LocalPlayer:WaitForChild("PlayerGui", 10)
-    if pGui then
-        cleanAllExistingNotifications()
-        Cupie:AddConnection(pGui.DescendantAdded:Connect(function(desc)
-            if Config.HideNotifications then
-                task.defer(function()
-                    if isNotificationElement(desc) then purgeNotification(desc) end
-                end)
-            end
-        end))
-    end
-end)
-
-cleanAllExistingNotifications()
 
 -- ══════════════════════════════════════════════════════════
 -- HELPER FUNCTIONS (Plot, In-Game Equip & Remote Handlers)
@@ -2095,22 +2044,25 @@ local invRarityPara = DashTab:CreateParagraph({
 
 -- Known Character Rarity Dictionary (Instant O(1) Lookup, No require hang)
 local CharacterRarities = {
-    -- Common (Tier 1)
-    ["luffy"] = "Common", ["zoro"] = "Common", ["sanji"] = "Common", ["nami"] = "Common",
-    ["usopp"] = "Common", ["chopper"] = "Common", ["naruto"] = "Common", ["sasuke"] = "Common",
-    ["sakura"] = "Common", ["ichigo"] = "Common", ["rukia"] = "Common", ["goku"] = "Common",
-    ["vegeta"] = "Common", ["krillin"] = "Common", ["tanjiro"] = "Common", ["nezuko"] = "Common",
-    ["zenitsu"] = "Common", ["inosuke"] = "Common", ["mob"] = "Common", ["reigen"] = "Common",
-    ["rock lee"] = "Common", ["rocklee"] = "Common", ["shinra"] = "Common", ["erwin"] = "Common",
+    -- Common
+    ["luffy"] = "Common", ["luppi"] = "Common", ["zoro"] = "Common", ["sanji"] = "Common",
+    ["nami"] = "Common", ["usopp"] = "Common", ["chopper"] = "Common", ["naruto"] = "Common",
+    ["sasuke"] = "Common", ["sakura"] = "Common", ["ichigo"] = "Common", ["rukia"] = "Common",
+    ["goku"] = "Common", ["vegeta"] = "Common", ["krillin"] = "Common", ["tanjiro"] = "Common",
+    ["nezuko"] = "Common", ["zenitsu"] = "Common", ["inosuke"] = "Common", ["mob"] = "Common",
+    ["reigen"] = "Common", ["rock lee"] = "Common", ["rocklee"] = "Common", ["shinra"] = "Common",
+    ["erwin"] = "Common", ["itadori"] = "Common", ["itadoro"] = "Common", ["fushiguro"] = "Common",
+    ["kugisaki"] = "Common", ["asta"] = "Common", ["yuno"] = "Common", ["deku"] = "Common",
+    ["bakugo"] = "Common", ["todoroki"] = "Common",
 
-    -- Rare (Tier 2)
+    -- Rare
     ["ace"] = "Rare", ["sabo"] = "Rare", ["law"] = "Rare", ["kid"] = "Rare",
     ["kakashi"] = "Rare", ["gaara"] = "Rare", ["itachi"] = "Rare", ["renji"] = "Rare",
     ["byakuya"] = "Rare", ["piccolo"] = "Rare", ["gohan"] = "Rare", ["trunks"] = "Rare",
     ["rengoku"] = "Rare", ["tomioka"] = "Rare", ["shinobu"] = "Rare", ["maki"] = "Rare",
     ["megumi"] = "Rare", ["nobara"] = "Rare", ["todo"] = "Rare", ["choso"] = "Rare",
 
-    -- Epic (Tier 3)
+    -- Epic
     ["whitebeard"] = "Epic", ["blackbeard"] = "Epic", ["shanks"] = "Epic", ["mihawk"] = "Epic",
     ["minato"] = "Epic", ["jiraiya"] = "Epic", ["tsunade"] = "Epic", ["orochimaru"] = "Epic",
     ["aizen"] = "Epic", ["kenpachi"] = "Epic", ["hitsugaya"] = "Epic", ["frieza"] = "Epic",
@@ -2118,7 +2070,7 @@ local CharacterRarities = {
     ["kokushibo"] = "Epic", ["sukuna"] = "Epic", ["gojo"] = "Epic", ["geto"] = "Epic",
     ["toji"] = "Epic", ["yuta"] = "Epic", ["saitama"] = "Epic", ["genos"] = "Epic",
 
-    -- Legendary (Tier 4)
+    -- Legendary
     ["roger"] = "Legendary", ["kaido"] = "Legendary", ["bigmom"] = "Legendary", ["garp"] = "Legendary",
     ["madara"] = "Legendary", ["hashirama"] = "Legendary", ["obito"] = "Legendary", ["pain"] = "Legendary",
     ["yamamoto"] = "Legendary", ["yhwach"] = "Legendary", ["beerus"] = "Legendary", ["whis"] = "Legendary",
@@ -2230,7 +2182,7 @@ local function getPlayerCurrencies()
     return tostring(gold or "0"), tostring(gems or "0"), tostring(wins or "0")
 end
 
--- Fast Direct Character Inventory Scanner (Instant O(N), No hanging requires)
+-- Fast Direct Character Inventory Scanner (Instant O(N), Multi-Source)
 local function scanPlayerCharacterInventory()
     local rarityCounts = {
         ["Limited"]   = 0,
@@ -2250,71 +2202,107 @@ local function scanPlayerCharacterInventory()
         ["Common"]    = 0
     }
     local totalChars = 0
-    
-    -- Scan Data / Inventory Folder
-    local invFolder = nil
-    local dataFolder = LocalPlayer:FindFirstChild("Data")
-    if dataFolder then
-        invFolder = dataFolder:FindFirstChild("Inventory") or dataFolder:FindFirstChild("Characters")
-    end
-    if not invFolder then
-        invFolder = LocalPlayer:FindFirstChild("Inventory") or LocalPlayer:FindFirstChild("Characters")
-    end
-    
-    if invFolder then
-        for _, item in ipairs(invFolder:GetChildren()) do
-            totalChars = totalChars + 1
-            local rStr = nil
-            
-            local attrRarity = item:GetAttribute("Rarity")
-            if attrRarity and type(attrRarity) == "string" then
-                rStr = attrRarity
-            else
-                local rarityChild = item:FindFirstChild("Rarity")
-                if rarityChild and rarityChild:IsA("ValueBase") then
-                    rStr = tostring(rarityChild.Value)
+    local scannedItems = {}
+
+    local function addChar(name, explicitRarity)
+        if not name or name == "" then return end
+        local nLower = tostring(name):lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)]", ""):trim()
+        if nLower == "" then return end
+        
+        local rStr = explicitRarity or CharacterRarities[nLower]
+        if not rStr then
+            for rName in pairs(rarityCounts) do
+                if nLower:find(rName:lower()) then
+                    rStr = rName
+                    break
                 end
             end
-            
-            if not rStr then
-                local itemNameLower = item.Name:lower()
-                rStr = CharacterRarities[itemNameLower]
+        end
+        if not rStr then
+            for charKey, rVal in pairs(CharacterRarities) do
+                if nLower:find(charKey) or charKey:find(nLower) then
+                    rStr = rVal
+                    break
+                end
             end
-            
-            if rStr and rarityCounts[rStr] then
-                rarityCounts[rStr] = rarityCounts[rStr] + 1
-            else
-                local matched = false
-                for rarityName in pairs(rarityCounts) do
-                    if item.Name:lower():find(rarityName:lower()) then
-                        rarityCounts[rarityName] = rarityCounts[rarityName] + 1
-                        matched = true
-                        break
+        end
+        rStr = rStr or "Common"
+        
+        totalChars = totalChars + 1
+        rarityCounts[rStr] = (rarityCounts[rStr] or 0) + 1
+    end
+    
+    -- 1. Scan Data Folder (Inventory, Characters, Hotbar, Units)
+    pcall(function()
+        local dataFolder = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData")
+        if dataFolder then
+            for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped"}) do
+                local sub = dataFolder:FindFirstChild(folderName)
+                if sub then
+                    for _, item in ipairs(sub:GetChildren()) do
+                        local attrR = item:GetAttribute("Rarity")
+                        local rChild = item:FindFirstChild("Rarity")
+                        local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
+                        addChar(item.Name, rVal)
                     end
                 end
-                if not matched then
-                    rarityCounts["Common"] = rarityCounts["Common"] + 1
-                end
             end
         end
-    end
+    end)
     
-    -- Also scan PlacedCharacters on plot
-    local plot = getMyPlot()
-    if plot and plot:FindFirstChild("PlacedCharacters") then
-        for _, ch in ipairs(plot.PlacedCharacters:GetChildren()) do
-            local chRarity = ch:GetAttribute("Rarity") or CharacterRarities[ch.Name:lower()]
-            if chRarity and rarityCounts[chRarity] then
-                if not invFolder then
-                    totalChars = totalChars + 1
-                    rarityCounts[chRarity] = rarityCounts[chRarity] + 1
+    -- 2. Scan LocalPlayer direct folders
+    pcall(function()
+        for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units"}) do
+            local sub = LocalPlayer:FindFirstChild(folderName)
+            if sub then
+                for _, item in ipairs(sub:GetChildren()) do
+                    local attrR = item:GetAttribute("Rarity")
+                    local rChild = item:FindFirstChild("Rarity")
+                    local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
+                    addChar(item.Name, rVal)
                 end
             end
         end
+    end)
+    
+    -- 3. Scan PlacedCharacters on plot
+    pcall(function()
+        local plot = getMyPlot()
+        if plot and plot:FindFirstChild("PlacedCharacters") then
+            for _, ch in ipairs(plot.PlacedCharacters:GetChildren()) do
+                local chRarity = ch:GetAttribute("Rarity")
+                addChar(ch.Name, chRarity)
+            end
+        end
+    end)
+
+    -- 4. Fallback: Scan Hotbar GUI elements if total is 0
+    if totalChars == 0 then
+        pcall(function()
+            local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+            if pGui then
+                for _, g in ipairs(pGui:GetChildren()) do
+                    if g:IsA("ScreenGui") and g.Name ~= "CUPIEUI" then
+                        local hotbar = g:FindFirstChild("Hotbar", true) or g:FindFirstChild("Slots", true) or g:FindFirstChild("Equipped", true)
+                        if hotbar then
+                            for _, slot in ipairs(hotbar:GetChildren()) do
+                                if slot:IsA("GuiObject") and slot.Visible then
+                                    local nameLabel = slot:FindFirstChildWhichIsA("TextLabel", true)
+                                    if nameLabel and nameLabel.Text ~= "" and not nameLabel.Text:match("^%d+$") then
+                                        addChar(nameLabel.Text)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
     end
     
     return rarityCounts, totalChars
 end
+
 
 -- Live Stats Updater Loop
 local function updateDashboardStats(startTime)

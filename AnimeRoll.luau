@@ -2173,52 +2173,28 @@ local function parseFormattedNumber(val)
 end
 
 
+
 local function getCurrentPlayerGold()
-    -- 1. Scan PlayerGui for active Gold display text
-    local pGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if pGui then
-        for _, gui in ipairs(pGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name ~= "CUPIEUI" and gui.Enabled then
-                for _, lbl in ipairs(gui:GetDescendants()) do
-                    if lbl:IsA("TextLabel") and lbl.Visible then
-                        local txt = lbl.Text:match("^%s*(.-)%s*$") or ""
-                        local lName = lbl.Name:lower()
-                        local pName = (lbl.Parent and lbl.Parent.Name:lower()) or ""
-                        if (lName:find("gold") or lName:find("coin") or pName:find("gold") or pName:find("coin")) and txt:match("%d") then
-                            local n = parseFormattedNumber(txt)
-                            if n > 0 then return n end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    -- 2. LocalPlayer Live ValueBase Folders
-    for _, fName in ipairs({"Data", "leaderstats", "PlayerData"}) do
-        local dFolder = LocalPlayer:FindFirstChild(fName)
-        if dFolder then
-            for _, gName in ipairs({"Gold", "Coins", "Money"}) do
-                local gVal = dFolder:FindFirstChild(gName)
-                if gVal and gVal:IsA("ValueBase") and tonumber(gVal.Value) then
-                    return tonumber(gVal.Value)
-                end
-            end
-        end
-    end
-
-    -- 3. DataService profile accessor
+    -- 1. Direct DataServiceClient Live Memory Access
     local dsGold = nil
     pcall(function()
-        local dataServMod = ReplicatedStorage:FindFirstChild("Data") and ReplicatedStorage.Data:FindFirstChild("DataService")
-        if dataServMod then
-            local ds = require(dataServMod)
-            local client = (type(ds) == "table" and (ds.client or ds.Client or ds)) or ds
-            if client and client.get then
-                dsGold = client:get(LocalPlayer, {"Gold"}) or client:get({"Gold"})
-            end
-            if not dsGold and client.Profile and client.Profile.Gold then
-                dsGold = client.Profile.Gold
+        local dsClientMod = ReplicatedStorage:FindFirstChild("Data") 
+            and ReplicatedStorage.Data:FindFirstChild("DataService") 
+            and (ReplicatedStorage.Data.DataService:FindFirstChild("DataServiceClient") or ReplicatedStorage.Data.DataService:FindFirstChild("Data"))
+        if dsClientMod then
+            local ds = require(dsClientMod)
+            if type(ds) == "table" then
+                if ds._data and type(ds._data) == "table" then
+                    if ds._data._data and type(ds._data._data.Gold) == "number" then
+                        dsGold = ds._data._data.Gold
+                    elseif type(ds._data.Gold) == "number" then
+                        dsGold = ds._data.Gold
+                    end
+                elseif ds.client and ds.client._data and type(ds.client._data._data) == "table" and type(ds.client._data._data.Gold) == "number" then
+                    dsGold = ds.client._data._data.Gold
+                elseif type(ds.Gold) == "number" then
+                    dsGold = ds.Gold
+                end
             end
         end
     end)
@@ -2226,9 +2202,60 @@ local function getCurrentPlayerGold()
         return dsGold
     end
 
-    -- 4. Screen Currency Parser fallback
-    local gStr, _, _ = getPlayerCurrencies()
-    return parseFormattedNumber(gStr)
+    -- 2. Direct ReplicatedStorage DataService Client get()
+    pcall(function()
+        local dsMod = ReplicatedStorage:FindFirstChild("Data") and ReplicatedStorage.Data:FindFirstChild("DataService")
+        if dsMod then
+            local ds = require(dsMod)
+            local client = (type(ds) == "table" and (ds.client or ds.Client or ds)) or ds
+            if client and client.get then
+                local res = client:get(LocalPlayer, {"Gold"}) or client:get({"Gold"})
+                if type(res) == "number" then dsGold = res end
+            end
+        end
+    end)
+    if dsGold and type(dsGold) == "number" and dsGold >= 0 then
+        return dsGold
+    end
+
+    -- 3. LocalPlayer Data / leaderstats ValueBase
+    for _, fName in ipairs({"Data", "leaderstats", "PlayerData", "Stats"}) do
+        local dFolder = LocalPlayer:FindFirstChild(fName)
+        if dFolder then
+            for _, gName in ipairs({"Gold", "Coins", "Money", "Cash"}) do
+                local gVal = dFolder:FindFirstChild(gName)
+                if gVal and gVal:IsA("ValueBase") and tonumber(gVal.Value) ~= nil then
+                    return tonumber(gVal.Value)
+                end
+            end
+        end
+    end
+
+    -- 4. Strictly Scoped TopBar HUD TextLabel (Excludes Shop, Products, Gamepasses, Upgrades)
+    local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if pGui then
+        for _, gui in ipairs(pGui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Name ~= "CUPIEUI" and gui.Enabled then
+                local gName = gui.Name:lower()
+                if not gName:find("shop") and not gName:find("pass") and not gName:find("product") and not gName:find("upgr") and not gName:find("trade") then
+                    for _, lbl in ipairs(gui:GetDescendants()) do
+                        if lbl:IsA("TextLabel") and lbl.Visible then
+                            local lName = lbl.Name:lower()
+                            local pName = (lbl.Parent and lbl.Parent.Name:lower()) or ""
+                            if not pName:find("shop") and not pName:find("product") and not pName:find("cost") and not pName:find("price") then
+                                if (lName == "gold" or lName == "coins" or lName == "money" or pName == "gold" or pName == "coins") and lbl.Text:match("%d") then
+                                    local parsed = parseFormattedNumber(lbl.Text)
+                                    if parsed >= 0 then return parsed end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return 0
 end
 
 
@@ -3170,7 +3197,7 @@ GachaTab:CreateToggle({
             Cupie:StartLoop("AutoRollLoop", 0.3, function()
                 if not Config.AutoRoll then return end
                 
-                -- STEP 1: If Smart Auto Buy is enabled, inspect current stands on the pad
+                -- STEP 1: Inspect matching target characters on the stands
                 if Config.AutoBuyByRarity then
                     local currentTargets = getMatchingStandTargets()
                     
@@ -3178,9 +3205,9 @@ GachaTab:CreateToggle({
                         for _, target in ipairs(currentTargets) do
                             local requiredCost = target.Cost or 200
                             
-                            -- STRICT BLOCKING PAUSE: As long as money is not enough, STAY ON STAND AND WAIT!
+                            -- STRICT BLOCKING PAUSE: As long as money is not enough, FREEZE ROLL AND WAIT!
                             while Config.AutoRoll and Config.AutoBuyByRarity and target.Model and target.Model.Parent and getCurrentPlayerGold() < requiredCost do
-                                task.wait(0.5)
+                                task.wait(0.4)
                             end
                             
                             -- When money is enough, BUY IT!
@@ -3194,7 +3221,19 @@ GachaTab:CreateToggle({
                 
                 if not Config.AutoRoll then return end
                 
-                -- STEP 2: Trigger Roll (Only reached after all matching targets are bought!)
+                -- Check again if any matching target is STILL unbought because money is still insufficient
+                if Config.AutoBuyByRarity then
+                    local remainingTargets = getMatchingStandTargets()
+                    for _, target in ipairs(remainingTargets) do
+                        local requiredCost = target.Cost or 200
+                        if getCurrentPlayerGold() < requiredCost then
+                            -- STILL INSUFFICIENT GOLD: DO NOT ROLL! RETURN IMMEDIATELY AND WAIT!
+                            return
+                        end
+                    end
+                end
+                
+                -- STEP 2: Trigger Roll (Only reached when no unbought matching targets exist!)
                 local plot = getMyPlot()
                 local prompt, btn = getPlotRollPrompt(plot)
                 if prompt then
@@ -3206,7 +3245,7 @@ GachaTab:CreateToggle({
                 -- STEP 3: Wait for newly rolled characters to spawn on stand (0.35s)
                 task.wait(0.35)
                 
-                -- STEP 4: Inspect new roll and buy immediately if funds are already sufficient
+                -- STEP 4: Inspect new roll and buy immediately if funds are ready
                 if Config.AutoBuyByRarity then
                     local newTargets = getMatchingStandTargets()
                     for _, target in ipairs(newTargets) do
@@ -3221,9 +3260,6 @@ GachaTab:CreateToggle({
                 -- STEP 5: Wait user configured Roll Delay before next attempt
                 task.wait(math.max(1.0, Config.RollDelay - 0.35))
             end)
-        else
-            Cupie:StopLoop("AutoRollLoop")
-        end
     end
 })
 

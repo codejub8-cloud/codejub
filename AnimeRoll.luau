@@ -1926,7 +1926,83 @@ end
 
 
 -- ══════════════════════════════════════════════════════════
--- GUARANTEED SMART AUTO BUY (DUAL ENGINE: DIRECT PROMPT + INSTANT REMOTE)
+-- OFFICIAL CHARACTER PRICES & MUTATION MULTIPLIERS
+-- ══════════════════════════════════════════════════════════
+
+local CharacterPrices = {
+    ["zero"] = 200, ["zoro"] = 200, ["krillin"] = 200, ["keririn"] = 200,
+    ["luffy"] = 275, ["luppi"] = 275, ["ussop"] = 300, ["usopp"] = 300, ["usoff"] = 300,
+    ["itadori"] = 500, ["itadoro"] = 500, ["rock lee"] = 750, ["rocklee"] = 750, ["solid lei"] = 750,
+    ["maki"] = 1000, ["mika"] = 1000, ["goku"] = 1000, ["goke"] = 1000,
+    ["mob"] = 1200, ["mobi"] = 1200, ["reigen"] = 1200,
+    ["junwoo"] = 1800, ["janwoo"] = 1800, ["sakura"] = 1800, ["sukora"] = 1800,
+    ["choji"] = 3500, ["soji"] = 3500,
+    ["shinra"] = 4200, ["shinrat"] = 4200, ["ban"] = 4500, ["bon"] = 4500,
+    ["tanjiro"] = 4800, ["tanjuro"] = 4800, ["manji"] = 5200,
+    ["guts"] = 6000, ["got"] = 6000, ["renji"] = 7000, ["rinnju"] = 7000,
+    ["piccolo"] = 7800, ["picurro"] = 7800, ["shikamaru"] = 10000, ["shikamura"] = 10000,
+    ["saitama"] = 16000, ["saitomo"] = 16000, ["sukuna"] = 17500, ["sakuna"] = 17500,
+    ["gojo"] = 18000, ["goji"] = 18000, ["erwin"] = 20000, ["erwon"] = 20000,
+    ["naruto"] = 24000, ["noruto"] = 24000, ["summonertest"] = 24000,
+    ["trunks"] = 36000, ["truck"] = 36000,
+    ["akaza"] = 50500, ["akazo"] = 50500, ["entoma"] = 50000, ["entomancer"] = 50000,
+    ["stark"] = 60000, ["coyote"] = 60000, ["kokushibo"] = 70000, ["kokushiro"] = 70000,
+    ["simo hayha"] = 75000, ["shimo haya"] = 75000, ["hoshina"] = 80000, ["hoshira"] = 80000,
+    ["ace"] = 85000, ["acer"] = 85000, ["grimmjow"] = 85000, ["grimmick"] = 85000,
+    ["zenitsu"] = 120000, ["zinichou"] = 120000, ["broly"] = 127500, ["brocolli"] = 127500,
+    ["nanami"] = 200000, ["nonomi"] = 200000, ["orihime"] = 200000, ["orihemi"] = 200000,
+    ["dio"] = 200000, ["deyo"] = 200000, ["rengoku"] = 250000, ["rengundam"] = 250000,
+    ["frieren"] = 275000, ["fryren"] = 275000, ["yhwatch"] = 310000, ["yuwah"] = 310000,
+    ["toji"] = 350000, ["joti"] = 350000, ["kisuke"] = 350000, ["kiwusuke"] = 350000,
+    ["yoruichi"] = 375000, ["yoriki"] = 375000, ["kashimo"] = 450000, ["kashimi"] = 450000,
+    ["jiren"] = 450000, ["jerin"] = 450000,
+    ["kakashi"] = 650000, ["kebashi"] = 650000, ["tobi"] = 650000, ["tomi"] = 650000,
+    ["beerus"] = 650000, ["bills"] = 650000, ["byakuya"] = 700000, ["brakura"] = 700000,
+    ["ulquiorra"] = 750000, ["ulquiopta"] = 750000, ["rimuru"] = 750000, ["remura"] = 750000,
+    ["whis"] = 1125000, ["wise"] = 1125000, ["kenpachi"] = 1125000, ["kenie"] = 1125000,
+    ["gyomei"] = 1500000, ["gyomain"] = 1500000, ["yamamoto"] = 1750000, ["yamumoto"] = 1750000,
+    ["megumi"] = 2500000, ["megumo"] = 2500000, ["yuta"] = 3100000, ["yutta"] = 3100000,
+    ["aizen (transcendent)"] = 3500000, ["aisen (divine)"] = 3500000,
+    ["hakari"] = 3900000, ["hakuro"] = 3900000, ["ichigo"] = 4000000, ["isogo (true form)"] = 4000000,
+    ["mojuro"] = 4500000, ["moru"] = 4500000, ["sasuke"] = 5000000, ["susuko"] = 5000000,
+    ["dabura"] = 6000000, ["daburo"] = 6000000, ["madara"] = 7500000, ["madura"] = 7500000,
+    ["hashirama"] = 7500000, ["hashyrama"] = 7500000
+}
+
+local MutationPriceMultipliers = {
+    ["gold"]       = 2,
+    ["diamond"]    = 5,
+    ["demon"]      = 10,
+    ["destroyer"]  = 15,
+    ["hollow"]     = 20,
+    ["slayer"]     = 25,
+    ["cursed"]     = 30,
+    ["astronaut"]  = 1
+}
+
+local function getCharacterCost(cleanName, mutStr)
+    local base = CharacterPrices[cleanName] or 200
+    local mult = 1
+    if mutStr and mutStr ~= "" then
+        for mKey, mVal in pairs(MutationPriceMultipliers) do
+            if mutStr:find(mKey) then
+                mult = mVal
+                break
+            end
+        end
+    end
+    return base * mult
+end
+
+local function getCurrentPlayerGold()
+    local gStr, _, _ = getPlayerCurrencies()
+    local clean = tostring(gStr or "0"):gsub("[^%d]", "")
+    return tonumber(clean) or 0
+end
+
+
+-- ══════════════════════════════════════════════════════════
+-- FUND-VERIFIED SMART AUTO BUY (PAUSES ROLL IF MONEY INSUFFICIENT)
 -- ══════════════════════════════════════════════════════════
 
 local function executeSmartAutoBuy()
@@ -2004,17 +2080,15 @@ local function executeSmartAutoBuy()
         end
     end
 
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
     local myPlot = getMyPlot()
-    local buyPromptsToFire = {}
-
-    -- 1. Scan ProximityPrompts across the player's plot and nearby workspace
     local searchContainers = {}
     if myPlot then table.insert(searchContainers, myPlot) end
     local plotsFolder = Workspace:FindFirstChild("Plots")
     if plotsFolder then table.insert(searchContainers, plotsFolder) end
 
+    local matchingStands = {}
+
+    -- Scan stands on plot
     for _, container in ipairs(searchContainers) do
         for _, prompt in ipairs(container:GetDescendants()) do
             if prompt:IsA("ProximityPrompt") and prompt.Enabled then
@@ -2024,7 +2098,7 @@ local function executeSmartAutoBuy()
                 
                 if pName:find("buy") or aText:find("buy") or oText:find("buy") or (prompt.Parent and prompt.Parent.Name == "HumanoidRootPart") then
                     local model = prompt:FindFirstAncestorWhichIsA("Model")
-                    if model and model ~= char and model.Name ~= "Terrain" then
+                    if model and model ~= LocalPlayer.Character and model.Name ~= "Terrain" then
                         local uName = model.Name
                         local cleanName = uName:lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
                         
@@ -2036,7 +2110,13 @@ local function executeSmartAutoBuy()
                         local mStr = (attrM and tostring(attrM)) or (mutChild and mutChild.Name) or (model.Name:lower():find("gold") and "Gold") or (model.Name:lower():find("astronaut") and "Astronaut") or nil
                         
                         if checkMatches(uName, rStr, mStr) then
-                            table.insert(buyPromptsToFire, prompt)
+                            local cost = getCharacterCost(cleanName, mStr)
+                            table.insert(matchingStands, {
+                                Prompt = prompt,
+                                Model = model,
+                                Name = uName,
+                                Cost = cost
+                            })
                         end
                     end
                 end
@@ -2044,26 +2124,37 @@ local function executeSmartAutoBuy()
         end
     end
 
-    -- Fire all qualified prompts immediately
-    for _, prompt in ipairs(buyPromptsToFire) do
-        pcall(function()
-            prompt.MaxActivationDistance = 999999
-            prompt.RequiresLineOfSight = false
-            prompt.HoldDuration = 0
-        end)
-        if fireproximityprompt then
-            pcall(function() fireproximityprompt(prompt) end)
+    -- Process each matching stand with Fund Verification
+    for _, stand in ipairs(matchingStands) do
+        local requiredGold = stand.Cost or 200
+        
+        -- If player does NOT have enough gold, wait in loop until enough gold is farmed!
+        while Config.AutoRoll and Config.AutoBuyByRarity and getCurrentPlayerGold() < requiredGold do
+            task.wait(0.5)
         end
-        if prompt.InputHoldBegin then
+        
+        -- Once gold is sufficient, buy the unit!
+        if getCurrentPlayerGold() >= requiredGold then
             pcall(function()
-                prompt:InputHoldBegin()
-                task.wait(0.02)
-                prompt:InputHoldEnd()
+                stand.Prompt.MaxActivationDistance = 999999
+                stand.Prompt.RequiresLineOfSight = false
+                stand.Prompt.HoldDuration = 0
             end)
+            if fireproximityprompt then
+                pcall(function() fireproximityprompt(stand.Prompt) end)
+            end
+            if stand.Prompt.InputHoldBegin then
+                pcall(function()
+                    stand.Prompt:InputHoldBegin()
+                    task.wait(0.02)
+                    stand.Prompt:InputHoldEnd()
+                end)
+            end
+            task.wait(0.1)
         end
     end
 
-    -- 2. Direct Multi-Tier Remote Trigger as Instant Backup
+    -- Direct Remote Backup for All Active Stand Slots
     if not CharactersBuy then
         pcall(function()
             CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
@@ -2072,7 +2163,7 @@ local function executeSmartAutoBuy()
         end)
     end
     
-    if CharactersBuy then
+    if CharactersBuy and #matchingStands > 0 then
         for tier = 1, 4 do
             for slot = 1, 3 do
                 pcall(function() CharactersBuy:FireServer(tier, slot) end)

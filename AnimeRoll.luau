@@ -2187,7 +2187,7 @@ end
 
 
 -- ══════════════════════════════════════════════════════════
--- INSTANT GUARANTEED SMART AUTO BUY (PLOT STAND + DUAL REMOTE TRIGGER)
+-- PROXIMITY-GUARANTEED SMART AUTO BUY (SERVER DISTANCE BYPASS)
 -- ══════════════════════════════════════════════════════════
 
 local function executeSmartAutoBuy()
@@ -2251,61 +2251,145 @@ local function executeSmartAutoBuy()
         end
     end
 
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local originalCF = root and root.CFrame
     local myPlot = getMyPlot()
-    local charFolder = myPlot and (myPlot:FindFirstChild("Characters") or myPlot:FindFirstChild("Stands"))
-    local standChildren = charFolder and charFolder:GetChildren() or {}
 
-    -- 1. If plot stand models exist, inspect each slot directly
-    if #standChildren > 0 then
-        for slotIdx, model in ipairs(standChildren) do
-            if model:IsA("Model") and model ~= LocalPlayer.Character then
-                local uName = model.Name
-                local cleanName = uName:lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
+    -- Search for all Buy Prompts and Models on plot / near player
+    local searchContainers = {}
+    if myPlot then table.insert(searchContainers, myPlot) end
+    local plotsFolder = Workspace:FindFirstChild("Plots")
+    if plotsFolder then table.insert(searchContainers, plotsFolder) end
+
+    local buyTargets = {}
+
+    for _, container in ipairs(searchContainers) do
+        for _, prompt in ipairs(container:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+                local pName = prompt.Name:lower()
+                local aText = prompt.ActionText:lower()
+                local oText = prompt.ObjectText:lower()
                 
-                local attrR = model:GetAttribute("Rarity") or model:GetAttribute("Tier")
-                local rStr = attrR or (CharacterRarities and CharacterRarities[cleanName]) or (CachedModuleRarities and CachedModuleRarities[cleanName]) or "Common"
-                
-                local attrM = model:GetAttribute("Mutation") or model:GetAttribute("Mutations") or model:GetAttribute("Variant")
-                local mutChild = model:FindFirstChild("Mutation") or model:FindFirstChild("Gold") or model:FindFirstChild("Diamond") or model:FindFirstChild("Astronaut")
-                local mStr = (attrM and tostring(attrM)) or (mutChild and mutChild.Name) or (model.Name:lower():find("gold") and "Gold") or (model.Name:lower():find("astronaut") and "Astronaut") or nil
-                
-                if checkMatches(uName, rStr, mStr) then
-                    local cost = getCharacterCost(cleanName, mStr)
-                    local curGold = getCurrentPlayerGold()
-                    
-                    -- Only wait if gold is strictly greater than 0 and less than cost
-                    if curGold > 0 and curGold < cost then
-                        local waitTimeout = 0
-                        while Config.AutoRoll and Config.AutoBuyByRarity and getCurrentPlayerGold() < cost and waitTimeout < 30 do
-                            task.wait(0.5)
-                            waitTimeout = waitTimeout + 0.5
+                if pName:find("buy") or aText:find("buy") or oText:find("buy") or (prompt.Parent and prompt.Parent.Name == "HumanoidRootPart") then
+                    local model = prompt:FindFirstAncestorWhichIsA("Model")
+                    if model and model ~= char and model.Name ~= "Terrain" then
+                        local uName = model.Name
+                        local cleanName = uName:lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
+                        
+                        -- Read Rarity from BillboardGui or Attribute
+                        local attrR = model:GetAttribute("Rarity") or model:GetAttribute("Tier")
+                        if not attrR then
+                            for _, desc in ipairs(model:GetDescendants()) do
+                                if desc:IsA("TextLabel") and desc.Visible then
+                                    local txt = desc.Text:lower()
+                                    if InGameRarities then
+                                        for _, rName in pairs(InGameRarities) do
+                                            if txt:find(rName:lower()) then
+                                                attrR = rName
+                                                break
+                                            end
+                                        end
+                                    end
+                                end
+                            end
                         end
-                    end
-                    
-                    -- Trigger Prompt on Model
-                    local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
-                    if prompt then
-                        firePrompt(prompt)
-                    end
-                    
-                    -- Direct Remote Trigger for this specific slot across active tiers
-                    if CharactersBuy then
-                        for tier = 1, 4 do
-                            pcall(function() CharactersBuy:FireServer(tier, slotIdx) end)
+                        local rStr = attrR or (CharacterRarities and CharacterRarities[cleanName]) or (CachedModuleRarities and CachedModuleRarities[cleanName]) or "Common"
+                        
+                        -- Read Mutation from BillboardGui or Attribute
+                        local attrM = model:GetAttribute("Mutation") or model:GetAttribute("Mutations") or model:GetAttribute("Variant")
+                        if not attrM then
+                            for _, desc in ipairs(model:GetDescendants()) do
+                                if desc:IsA("TextLabel") and desc.Visible then
+                                    local txt = desc.Text:lower()
+                                    if txt:find("gold") then attrM = "Gold"
+                                    elseif txt:find("diamond") then attrM = "Diamond"
+                                    elseif txt:find("astronaut") or txt:find("cosmic") then attrM = "Astronaut"
+                                    elseif txt:find("demon") then attrM = "Demon"
+                                    elseif txt:find("destroyer") then attrM = "Destroyer"
+                                    elseif txt:find("hollow") then attrM = "Hollow"
+                                    elseif txt:find("slayer") then attrM = "Slayer"
+                                    elseif txt:find("cursed") then attrM = "Cursed"
+                                    end
+                                end
+                            end
+                        end
+                        local mutChild = model:FindFirstChild("Mutation") or model:FindFirstChild("Gold") or model:FindFirstChild("Diamond") or model:FindFirstChild("Astronaut")
+                        local mStr = (attrM and tostring(attrM)) or (mutChild and mutChild.Name) or (model.Name:lower():find("gold") and "Gold") or (model.Name:lower():find("astronaut") and "Astronaut") or nil
+                        
+                        if checkMatches(uName, rStr, mStr) then
+                            local cost = getCharacterCost(cleanName, mStr)
+                            table.insert(buyTargets, {
+                                Prompt = prompt,
+                                Model = model,
+                                Name = uName,
+                                Cost = cost,
+                                TargetPart = prompt.Parent:IsA("BasePart") and prompt.Parent or model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+                            })
                         end
                     end
                 end
             end
         end
-    else
-        -- 2. Fallback: Trigger Buy for all slots across active tiers
+    end
+
+    -- Process each matching target with distance proximity guarantee
+    for slotIdx, target in ipairs(buyTargets) do
+        local requiredGold = target.Cost or 200
+        local curGold = getCurrentPlayerGold()
+        
+        -- If player has strictly positive gold but less than cost, wait briefly
+        if curGold > 0 and curGold < requiredGold then
+            local waitTimeout = 0
+            while Config.AutoRoll and Config.AutoBuyByRarity and getCurrentPlayerGold() < requiredGold and waitTimeout < 30 do
+                task.wait(0.5)
+                waitTimeout = waitTimeout + 0.5
+            end
+        end
+        
+        -- Position close to prompt to satisfy server distance verification
+        if root and target.TargetPart then
+            pcall(function()
+                root.CFrame = target.TargetPart.CFrame * CFrame.new(0, 0, 1.5)
+            end)
+            task.wait(0.04)
+        end
+        
+        -- Fire Prompt with maximum override
+        pcall(function()
+            target.Prompt.MaxActivationDistance = 999999
+            target.Prompt.RequiresLineOfSight = false
+            target.Prompt.HoldDuration = 0
+        end)
+        if fireproximityprompt then
+            pcall(function() fireproximityprompt(target.Prompt, 1) end)
+            pcall(function() fireproximityprompt(target.Prompt, 0) end)
+            pcall(function() fireproximityprompt(target.Prompt) end)
+        end
+        if target.Prompt.InputHoldBegin then
+            pcall(function()
+                target.Prompt:InputHoldBegin()
+                task.wait(0.02)
+                target.Prompt:InputHoldEnd()
+            end)
+        end
+
+        -- Direct Remote Call
         if CharactersBuy then
             for tier = 1, 4 do
-                for slot = 1, 3 do
-                    pcall(function() CharactersBuy:FireServer(tier, slot) end)
-                end
+                pcall(function() CharactersBuy:FireServer(tier, slotIdx) end)
+                pcall(function() CharactersBuy:FireServer(tier, 1) end)
+                pcall(function() CharactersBuy:FireServer(tier, 2) end)
+                pcall(function() CharactersBuy:FireServer(tier, 3) end)
             end
         end
+        
+        task.wait(0.06)
+    end
+
+    -- Restore player position back to roll pad smoothly
+    if root and originalCF and #buyTargets > 0 then
+        pcall(function() root.CFrame = originalCF end)
     end
 end
 

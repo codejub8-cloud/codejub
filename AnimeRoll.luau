@@ -2002,7 +2002,7 @@ end
 
 
 -- ══════════════════════════════════════════════════════════
--- FUND-VERIFIED SMART AUTO BUY (PAUSES ROLL IF MONEY INSUFFICIENT)
+-- SMART AUTO BUY (WITH BUILT-IN GOLD CHECK & BUY WAIT)
 -- ══════════════════════════════════════════════════════════
 
 local function executeSmartAutoBuy()
@@ -2088,7 +2088,7 @@ local function executeSmartAutoBuy()
 
     local matchingStands = {}
 
-    -- Scan stands on plot
+    -- Scan matching stand characters
     for _, container in ipairs(searchContainers) do
         for _, prompt in ipairs(container:GetDescendants()) do
             if prompt:IsA("ProximityPrompt") and prompt.Enabled then
@@ -2124,16 +2124,16 @@ local function executeSmartAutoBuy()
         end
     end
 
-    -- Process each matching stand with Fund Verification
+    -- Process Auto Buy with embedded Gold Check
     for _, stand in ipairs(matchingStands) do
         local requiredGold = stand.Cost or 200
         
-        -- If player does NOT have enough gold, wait in loop until enough gold is farmed!
+        -- If gold not enough, wait until gold is ready
         while Config.AutoRoll and Config.AutoBuyByRarity and getCurrentPlayerGold() < requiredGold do
-            task.wait(0.5)
+            task.wait(0.4)
         end
         
-        -- Once gold is sufficient, buy the unit!
+        -- Purchase stand
         if getCurrentPlayerGold() >= requiredGold then
             pcall(function()
                 stand.Prompt.MaxActivationDistance = 999999
@@ -2150,11 +2150,11 @@ local function executeSmartAutoBuy()
                     stand.Prompt:InputHoldEnd()
                 end)
             end
-            task.wait(0.1)
+            task.wait(0.08)
         end
     end
 
-    -- Direct Remote Backup for All Active Stand Slots
+    -- Direct Remote Backup Trigger
     if not CharactersBuy then
         pcall(function()
             CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 

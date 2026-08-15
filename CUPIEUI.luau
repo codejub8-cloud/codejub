@@ -28,6 +28,12 @@ local CoreGui = game:GetService("CoreGui")
 local StatsService = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+    repeat
+        task.wait()
+        LocalPlayer = Players.LocalPlayer
+    until LocalPlayer
+end
 
 --// ══════════════════════════════════════════════════════════
 --// THEME SYSTEM (Eye-Comfort & Harmonious Palettes)
@@ -221,10 +227,28 @@ end
 --// ══════════════════════════════════════════════════════════
 --// INITIALIZE SCREEN GUI & CLEANUP
 --// ══════════════════════════════════════════════════════════
-local parentGui = (gethui and gethui()) 
-    or (cloneref and cloneref(CoreGui)) 
-    or (LocalPlayer:FindFirstChild("PlayerGui")) 
-    or CoreGui
+local function getSafeParentGui()
+    if gethui then
+        local ok, h = pcall(gethui)
+        if ok and h then return h end
+    end
+    if cloneref then
+        local ok, cg = pcall(function() return cloneref(CoreGui) end)
+        if ok and cg then
+            local canParent = pcall(function()
+                local test = Instance.new("Folder")
+                test.Parent = cg
+                test:Destroy()
+            end)
+            if canParent then return cg end
+        end
+    end
+    local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+    if pg then return pg end
+    return CoreGui
+end
+
+local parentGui = getSafeParentGui()
 
 pcall(function()
     for _, g in ipairs(parentGui:GetChildren()) do

@@ -28,6 +28,12 @@ local CoreGui = game:GetService("CoreGui")
 local StatsService = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+    repeat
+        task.wait()
+        LocalPlayer = Players.LocalPlayer
+    until LocalPlayer
+end
 
 --// ══════════════════════════════════════════════════════════
 --// THEME SYSTEM (Eye-Comfort & Harmonious Palettes)
@@ -221,10 +227,28 @@ end
 --// ══════════════════════════════════════════════════════════
 --// INITIALIZE SCREEN GUI & CLEANUP
 --// ══════════════════════════════════════════════════════════
-local parentGui = (gethui and gethui()) 
-    or (cloneref and cloneref(CoreGui)) 
-    or (LocalPlayer:FindFirstChild("PlayerGui")) 
-    or CoreGui
+local function getSafeParentGui()
+    if gethui then
+        local ok, h = pcall(gethui)
+        if ok and h then return h end
+    end
+    if cloneref then
+        local ok, cg = pcall(function() return cloneref(CoreGui) end)
+        if ok and cg then
+            local canParent = pcall(function()
+                local test = Instance.new("Folder")
+                test.Parent = cg
+                test:Destroy()
+            end)
+            if canParent then return cg end
+        end
+    end
+    local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+    if pg then return pg end
+    return CoreGui
+end
+
+local parentGui = getSafeParentGui()
 
 pcall(function()
     for _, g in ipairs(parentGui:GetChildren()) do
@@ -1915,19 +1939,25 @@ local function executeStatUpgrades()
 end
 
 -- Anti-AFK Handler
-if getconnections then
-    pcall(function()
+pcall(function()
+    if getconnections and LocalPlayer then
         for _, conn in ipairs(getconnections(LocalPlayer.Idled)) do
             if conn.Disable then conn:Disable()
             elseif conn.Disconnect then conn:Disconnect() end
         end
-    end)
-end
-LocalPlayer.Idled:Connect(function()
-    if Config.AntiAFK then
-        VirtualUser:Button2Down(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
-        task.wait(0.2)
-        VirtualUser:Button2Up(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+    end
+    if LocalPlayer then
+        LocalPlayer.Idled:Connect(function()
+            if Config.AntiAFK and VirtualUser then
+                pcall(function()
+                    local cam = workspace.CurrentCamera
+                    local cf = cam and cam.CFrame or CFrame.new()
+                    VirtualUser:Button2Down(Vector2.new(0, 0), cf)
+                    task.wait(0.2)
+                    VirtualUser:Button2Up(Vector2.new(0, 0), cf)
+                end)
+            end
+        end)
     end
 end)
 

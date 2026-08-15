@@ -2301,72 +2301,63 @@ local function getStandTargetInfo(model)
 end
 
 
+
 -- ══════════════════════════════════════════════════════════
--- SYNCHRONIZED SMART AUTO BUY (WITH REAL-TIME GOLD WAITING ENGINE)
+-- DEDICATED STAND TARGET DISCOVERY & BUY ENGINE
 -- ══════════════════════════════════════════════════════════
 
-local function executeSmartAutoBuy()
-    if not CharactersBuy then
-        pcall(function()
-            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
-                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
-                and ReplicatedStorage.Remotes.Characters:FindFirstChild("Buy")
-        end)
+local function checkUnitMatchesFilter(unitName, unitRarity, unitMutation)
+    local rPass = false
+    local mPass = false
+
+    -- 1. Check Multi-Selected Rarities
+    if Config.SelectedBuyRarities and type(Config.SelectedBuyRarities) == "table" then
+        for rName, enabled in pairs(Config.SelectedBuyRarities) do
+            if enabled and unitRarity and (unitRarity:lower() == rName:lower() or unitRarity:lower():find(rName:lower())) then
+                rPass = true
+                break
+            end
+        end
     end
 
-    local function checkMatches(unitName, unitRarity, unitMutation)
-        local rPass = false
-        local mPass = false
-
-        -- 1. Check Multi-Selected Rarities
-        if Config.SelectedBuyRarities and type(Config.SelectedBuyRarities) == "table" then
-            for rName, enabled in pairs(Config.SelectedBuyRarities) do
-                if enabled and unitRarity and (unitRarity:lower() == rName:lower() or unitRarity:lower():find(rName:lower())) then
-                    rPass = true
+    -- 2. Check Multi-Selected Mutations
+    local mutStr = tostring(unitMutation or ""):lower()
+    if mutStr ~= "" and mutStr ~= "nil" and mutStr ~= "none" then
+        if Config.SelectedBuyMutations and type(Config.SelectedBuyMutations) == "table" then
+            for mName, enabled in pairs(Config.SelectedBuyMutations) do
+                if enabled and (mutStr:find(mName:lower()) or (mName:lower() == "astronaut" and mutStr:find("cosmic"))) then
+                    mPass = true
                     break
                 end
             end
         end
-
-        -- 2. Check Multi-Selected Mutations
-        local mutStr = tostring(unitMutation or ""):lower()
-        if mutStr ~= "" and mutStr ~= "nil" and mutStr ~= "none" then
-            if Config.SelectedBuyMutations and type(Config.SelectedBuyMutations) == "table" then
-                for mName, enabled in pairs(Config.SelectedBuyMutations) do
-                    if enabled and (mutStr:find(mName:lower()) or (mName:lower() == "astronaut" and mutStr:find("cosmic"))) then
-                        mPass = true
-                        break
-                    end
-                end
-            end
-        end
-
-        -- 3. Match Logic: Buy if matches any selected Rarity OR matches any selected Mutation
-        local anyRaritySelected = false
-        if Config.SelectedBuyRarities then
-            for _, v in pairs(Config.SelectedBuyRarities) do if v then anyRaritySelected = true break end end
-        end
-        local anyMutationSelected = false
-        if Config.SelectedBuyMutations then
-            for _, v in pairs(Config.SelectedBuyMutations) do if v then anyMutationSelected = true break end end
-        end
-
-        if anyRaritySelected and anyMutationSelected then
-            return rPass or mPass
-        elseif anyRaritySelected then
-            return rPass
-        elseif anyMutationSelected then
-            return mPass
-        else
-            return true
-        end
     end
 
+    local anyRaritySelected = false
+    if Config.SelectedBuyRarities then
+        for _, v in pairs(Config.SelectedBuyRarities) do if v then anyRaritySelected = true break end end
+    end
+    local anyMutationSelected = false
+    if Config.SelectedBuyMutations then
+        for _, v in pairs(Config.SelectedBuyMutations) do if v then anyMutationSelected = true break end end
+    end
+
+    if anyRaritySelected and anyMutationSelected then
+        return rPass or mPass
+    elseif anyRaritySelected then
+        return rPass
+    elseif anyMutationSelected then
+        return mPass
+    else
+        return true
+    end
+end
+
+local function getMatchingStandTargets()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local myPlot = getMyPlot()
 
-    -- 1. Scan candidate models on the plot and nearby
     local candidateModels = {}
     if myPlot then
         local charFolder = myPlot:FindFirstChild("Characters") or myPlot:FindFirstChild("Stands") or myPlot:FindFirstChild("Roll")
@@ -2412,60 +2403,69 @@ local function executeSmartAutoBuy()
         return (pA.X + pA.Z) < (pB.X + pB.Z)
     end)
 
-    local matchingTargets = {}
-
+    local matching = {}
     for slotIdx, model in ipairs(candidateModels) do
         local info = getStandTargetInfo(model)
-        if info and checkMatches(info.Name, info.Rarity, info.Mutation) then
+        if info and checkUnitMatchesFilter(info.Name, info.Rarity, info.Mutation) then
             info.SlotIdx = slotIdx
-            table.insert(matchingTargets, info)
+            table.insert(matching, info)
         end
     end
+    return matching
+end
 
-    -- Process each matching target: Strict Gold Check & Pause Loop
-    for _, target in ipairs(matchingTargets) do
-        local requiredCost = target.Cost or 200
-        
-        -- STRICT WAIT: If player does NOT have enough gold, pause execution until gold is farmed!
-        while Config.AutoBuyByRarity and target.Model and target.Model.Parent and getCurrentPlayerGold() < requiredCost do
-            task.wait(0.3)
+local function buyStandTarget(target)
+    if not target or not target.Model or not target.Model.Parent then return end
+    
+    if not CharactersBuy then
+        pcall(function()
+            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
+                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
+                and ReplicatedStorage.Remotes.Characters:FindFirstChild("Buy")
+        end)
+    end
+
+    if target.Prompt then
+        pcall(function()
+            target.Prompt.MaxActivationDistance = 999999
+            target.Prompt.RequiresLineOfSight = false
+            target.Prompt.HoldDuration = 0
+        end)
+        if fireproximityprompt then
+            pcall(function() fireproximityprompt(target.Prompt, 1) end)
+            pcall(function() fireproximityprompt(target.Prompt, 0) end)
+            pcall(function() fireproximityprompt(target.Prompt) end)
         end
-        
-        -- Purchase stand once gold is sufficient
-        if target.Model and target.Model.Parent and getCurrentPlayerGold() >= requiredCost then
-            if target.Prompt then
-                pcall(function()
-                    target.Prompt.MaxActivationDistance = 999999
-                    target.Prompt.RequiresLineOfSight = false
-                    target.Prompt.HoldDuration = 0
-                end)
-                if fireproximityprompt then
-                    pcall(function() fireproximityprompt(target.Prompt, 1) end)
-                    pcall(function() fireproximityprompt(target.Prompt, 0) end)
-                    pcall(function() fireproximityprompt(target.Prompt) end)
-                end
-                if target.Prompt.InputHoldBegin then
-                    pcall(function()
-                        target.Prompt:InputHoldBegin()
-                        task.wait(0.01)
-                        target.Prompt:InputHoldEnd()
-                    end)
-                end
-            end
-            
-            if CharactersBuy then
-                for tier = 1, 4 do
-                    pcall(function() CharactersBuy:FireServer(tier, target.SlotIdx) end)
-                    pcall(function() CharactersBuy:FireServer(tier, 1) end)
-                    pcall(function() CharactersBuy:FireServer(tier, 2) end)
-                    pcall(function() CharactersBuy:FireServer(tier, 3) end)
-                end
-            end
+        if target.Prompt.InputHoldBegin then
+            pcall(function()
+                target.Prompt:InputHoldBegin()
+                task.wait(0.01)
+                target.Prompt:InputHoldEnd()
+            end)
+        end
+    end
+    
+    if CharactersBuy then
+        for tier = 1, 4 do
+            pcall(function() CharactersBuy:FireServer(tier, target.SlotIdx) end)
+            pcall(function() CharactersBuy:FireServer(tier, 1) end)
+            pcall(function() CharactersBuy:FireServer(tier, 2) end)
+            pcall(function() CharactersBuy:FireServer(tier, 3) end)
+        end
+    end
+end
+
+local function executeSmartAutoBuy()
+    local targets = getMatchingStandTargets()
+    for _, target in ipairs(targets) do
+        local curGold = getCurrentPlayerGold()
+        local cost = target.Cost or 200
+        if curGold >= cost then
+            buyStandTarget(target)
             task.wait(0.08)
         end
     end
-
-    return #matchingTargets
+    return #targets
 end
 
 
@@ -3167,17 +3167,34 @@ GachaTab:CreateToggle({
             -- Position on pad once when starting
             smoothPositionToRollPad()
             
-            Cupie:StartLoop("AutoRollLoop", Config.RollDelay, function()
+            Cupie:StartLoop("AutoRollLoop", 0.3, function()
                 if not Config.AutoRoll then return end
                 
-                -- 1. Before rolling, ensure any unbought target units on the stand are purchased
+                -- STEP 1: If Smart Auto Buy is enabled, inspect current stands on the pad
                 if Config.AutoBuyByRarity then
-                    executeSmartAutoBuy()
+                    local currentTargets = getMatchingStandTargets()
+                    
+                    if #currentTargets > 0 then
+                        for _, target in ipairs(currentTargets) do
+                            local requiredCost = target.Cost or 200
+                            
+                            -- STRICT BLOCKING PAUSE: As long as money is not enough, STAY ON STAND AND WAIT!
+                            while Config.AutoRoll and Config.AutoBuyByRarity and target.Model and target.Model.Parent and getCurrentPlayerGold() < requiredCost do
+                                task.wait(0.5)
+                            end
+                            
+                            -- When money is enough, BUY IT!
+                            if target.Model and target.Model.Parent and getCurrentPlayerGold() >= requiredCost then
+                                buyStandTarget(target)
+                                task.wait(0.2)
+                            end
+                        end
+                    end
                 end
                 
                 if not Config.AutoRoll then return end
                 
-                -- 2. Trigger Roll
+                -- STEP 2: Trigger Roll (Only reached after all matching targets are bought!)
                 local plot = getMyPlot()
                 local prompt, btn = getPlotRollPrompt(plot)
                 if prompt then
@@ -3186,11 +3203,23 @@ GachaTab:CreateToggle({
                     pcall(function() CharactersRoll:FireServer() end)
                 end
 
-                -- 3. Wait for new roll to land on stand (0.35s) and buy immediately
+                -- STEP 3: Wait for newly rolled characters to spawn on stand (0.35s)
                 task.wait(0.35)
+                
+                -- STEP 4: Inspect new roll and buy immediately if funds are already sufficient
                 if Config.AutoBuyByRarity then
-                    executeSmartAutoBuy()
+                    local newTargets = getMatchingStandTargets()
+                    for _, target in ipairs(newTargets) do
+                        local requiredCost = target.Cost or 200
+                        if getCurrentPlayerGold() >= requiredCost then
+                            buyStandTarget(target)
+                            task.wait(0.1)
+                        end
+                    end
                 end
+                
+                -- STEP 5: Wait user configured Roll Delay before next attempt
+                task.wait(math.max(1.0, Config.RollDelay - 0.35))
             end)
         else
             Cupie:StopLoop("AutoRollLoop")
@@ -3297,8 +3326,10 @@ GachaTab:CreateToggle({
     Callback = function(state)
         Config.AutoBuyByRarity = state
         if state then
-            Cupie:StartLoop("AutoBuyRarityLoop", 0.4, function()
-                executeSmartAutoBuy()
+            Cupie:StartLoop("AutoBuyRarityLoop", 0.5, function()
+                if not Config.AutoRoll then
+                    executeSmartAutoBuy()
+                end
             end)
         else
             Cupie:StopLoop("AutoBuyRarityLoop")

@@ -2268,6 +2268,10 @@ end
 -- TOTAL CHARACTER SCANNER (INVENTORY BAG + PLACED ON PLOT)
 -- ══════════════════════════════════════════════════════════
 
+-- ══════════════════════════════════════════════════════════
+-- PRECISE CHARACTER INVENTORY SCANNER (NO FALSE POSITIVES)
+-- ══════════════════════════════════════════════════════════
+
 local function scanPlayerCharacterInventory()
     local rarityCounts = {
         ["Limited"]   = 0,
@@ -2342,7 +2346,9 @@ local function scanPlayerCharacterInventory()
         local raw = tostring(name):lower()
         local nClean = raw:gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " ")
         local nTrim = nClean:match("^%s*(.-)%s*$") or ""
-        if nTrim == "" or nTrim == "gold" or nTrim == "level" or nTrim == "slot" or nTrim == "button" or nTrim == "image" or nTrim == "frame" then
+        
+        -- Filter out invalid UI words and system strings
+        if nTrim == "" or nTrim == "gold" or nTrim == "level" or nTrim == "slot" or nTrim == "button" or nTrim == "image" or nTrim == "frame" or nTrim == "pass" or nTrim == "shop" or nTrim == "index" or nTrim == "trade" or nTrim == "items" or nTrim == "animes" or nTrim == "profile" or nTrim == "upgr" or nTrim == "upgrades" or nTrim == "boost" then
             return
         end
         
@@ -2353,16 +2359,19 @@ local function scanPlayerCharacterInventory()
         end
     end
 
-    -- 1. Scan via ReplicatedStorage.Data.DataService (Bag Inventory + Placed Profiles)
+    local dataServiceFound = false
+
+    -- 1. Query Client DataService (Profile Ground Truth)
     pcall(function()
         local dataServMod = ReplicatedStorage:FindFirstChild("Data") and ReplicatedStorage.Data:FindFirstChild("DataService")
         if dataServMod then
             local ds = require(dataServMod)
             local clientDS = (type(ds) == "table" and (ds.client or ds.Client or ds)) or nil
             if clientDS and type(clientDS.get) == "function" then
-                for _, category in ipairs({"Inventory", "Characters", "Hotbar", "Placed", "Stands", "Units"}) do
+                for _, category in ipairs({"Inventory", "Characters", "Hotbar", "Units"}) do
                     local catData = clientDS:get({category})
-                    if type(catData) == "table" then
+                    if type(catData) == "table" and next(catData) ~= nil then
+                        dataServiceFound = true
                         for k, v in pairs(catData) do
                             if type(v) == "table" then
                                 local cName = v.Name or v.CharacterName or v.Id or k
@@ -2379,18 +2388,18 @@ local function scanPlayerCharacterInventory()
         end
     end)
 
-    -- 2. Scan Data / PlayerData Folder on LocalPlayer
+    -- 2. Query LocalPlayer.Data Folders (Bag Inventory + Equipped)
     pcall(function()
         local dataFolder = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData")
         if dataFolder then
-            for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped", "Team", "PlacedCharacters", "Placed"}) do
+            for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped", "Team"}) do
                 local sub = dataFolder:FindFirstChild(folderName)
                 if sub then
                     for _, item in ipairs(sub:GetChildren()) do
                         local attrR = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
                         local rChild = item:FindFirstChild("Rarity") or item:FindFirstChild("Tier")
                         local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
-                        local itemUID = item:GetAttribute("UUID") or item:GetFullName()
+                        local itemUID = item:GetAttribute("UUID") or ("data_" .. item:GetFullName())
                         addChar(item.Name, rVal, itemUID)
                     end
                 end
@@ -2398,69 +2407,61 @@ local function scanPlayerCharacterInventory()
         end
     end)
     
-    -- 3. Scan LocalPlayer Direct Folders
+    -- 3. Scan LocalPlayer Direct Storage Folders
     pcall(function()
-        for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped", "PlacedCharacters"}) do
+        for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped"}) do
             local sub = LocalPlayer:FindFirstChild(folderName)
             if sub then
                 for _, item in ipairs(sub:GetChildren()) do
                     local attrR = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
                     local rChild = item:FindFirstChild("Rarity") or item:FindFirstChild("Tier")
                     local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
-                    local itemUID = item:GetAttribute("UUID") or item:GetFullName()
+                    local itemUID = item:GetAttribute("UUID") or ("lp_" .. item:GetFullName())
                     addChar(item.Name, rVal, itemUID)
                 end
             end
         end
     end)
 
-    -- 4. ALWAYS Scan Placed / Deployed Characters on the Plot (Count All Placed Units)
+    -- 4. Scan Placed Player Units on Plot (STRICT: Ignore Shop Stands / NPCs with BuyPrompt)
     pcall(function()
         local plot = getMyPlot()
         if plot then
-            -- Scan direct models on plot
-            for _, ch in ipairs(plot:GetChildren()) do
-                if ch:IsA("Model") and ch ~= LocalPlayer.Character and (ch:FindFirstChild("Humanoid") or ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChild("Head") or CharacterRarities[ch.Name:lower()]) then
-                    local chRarity = ch:GetAttribute("Rarity") or ch:GetAttribute("Tier")
-                    local chUID = ch:GetAttribute("UUID") or ("plot_" .. ch:GetFullName())
-                    addChar(ch.Name, chRarity, chUID)
-                end
-            end
-            
-            -- Scan subfolders on plot (Characters, PlacedCharacters, Units, Deployed, FlexCharacters)
-            for _, fName in ipairs({"Characters", "PlacedCharacters", "Units", "Deployed", "FlexCharacters"}) do
-                local charFolder = plot:FindFirstChild(fName)
-                if charFolder then
-                    for _, ch in ipairs(charFolder:GetChildren()) do
-                        if ch:IsA("Model") and ch ~= LocalPlayer.Character then
-                            local chRarity = ch:GetAttribute("Rarity") or ch:GetAttribute("Tier")
-                            local chUID = ch:GetAttribute("UUID") or ("plot_sub_" .. ch:GetFullName())
-                            addChar(ch.Name, chRarity, chUID)
-                        end
+            for _, obj in ipairs(plot:GetDescendants()) do
+                if obj:IsA("Model") and obj ~= LocalPlayer.Character then
+                    -- STRICT FILTER: Ignore shop stands, roll buttons, NPCs with BuyPrompt / RollPrompt
+                    local hasBuyPrompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true) ~= nil
+                    local hasFlexUI = obj:FindFirstChild("FlexUI", true) ~= nil or obj:FindFirstChild("BillboardGui", true) ~= nil
+                    local isCharacterModel = CharacterRarities[obj.Name:lower()] ~= nil or obj:FindFirstChild("Humanoid") ~= nil
+                    
+                    -- Only count player-placed units (has FlexUI or no BuyPrompt)
+                    if isCharacterModel and not hasBuyPrompt then
+                        local chRarity = obj:GetAttribute("Rarity") or obj:GetAttribute("Tier")
+                        local chUID = obj:GetAttribute("UUID") or ("plot_" .. obj:GetFullName())
+                        addChar(obj.Name, chRarity, chUID)
                     end
                 end
             end
         end
     end)
 
-    -- 5. Scan PlayerGui Hotbar & Character Cards (Visual Fallback if total is still 0)
-    if totalChars == 0 then
-        pcall(function()
-            local pGui = LocalPlayer:FindFirstChild("PlayerGui")
-            if pGui then
-                for _, g in ipairs(pGui:GetChildren()) do
-                    if g:IsA("ScreenGui") and g.Name ~= "CUPIEUI" and g.Enabled then
-                        for _, desc in ipairs(g:GetDescendants()) do
-                            if desc:IsA("TextLabel") and desc.Visible and desc.Text ~= "" then
-                                local txt = desc.Text
-                                local txtLower = txt:lower()
-                                if not txt:match("^%d+$") and not txtLower:find("boost") and not txtLower:find("pass") and not txtLower:find("shop") and not txtLower:find("index") and not txtLower:find("trade") and not txtLower:find("item") and not txtLower:find("profile") and not txtLower:find("fps") and not txtLower:find("ms") then
-                                    for charKey, rVal in pairs(CharacterRarities) do
-                                        if txtLower == charKey or txtLower:find(charKey, 1, true) then
-                                            local explicitR = desc:GetAttribute("Rarity") or (desc.Parent and desc.Parent:GetAttribute("Rarity"))
-                                            local cardUID = (desc.Parent and desc.Parent:GetFullName()) or desc:GetFullName()
-                                            addChar(txtLower, explicitR or rVal, cardUID)
-                                            break
+    -- 5. Scan Bottom Hotbar Slots in PlayerGui (Strict Hotbar Container Only)
+    pcall(function()
+        local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if pGui then
+            for _, g in ipairs(pGui:GetChildren()) do
+                if g:IsA("ScreenGui") and g.Name ~= "CUPIEUI" and g.Enabled then
+                    -- Find only the hotbar slot cards
+                    for _, slot in ipairs(g:GetDescendants()) do
+                        if slot:IsA("Frame") or slot:IsA("ImageLabel") then
+                            local lvLabel = slot:FindFirstChild("Level") or slot:FindFirstChild("Lv") or slot:FindFirstChildWhichIsA("TextLabel")
+                            if lvLabel and (lvLabel.Text:lower():find("lv") or lvLabel.Text:match("^%d+$")) then
+                                for _, textLabel in ipairs(slot:GetChildren()) do
+                                    if textLabel:IsA("TextLabel") and textLabel ~= lvLabel and textLabel.Text ~= "" then
+                                        local txtLower = textLabel.Text:lower()
+                                        if CharacterRarities[txtLower] or CharacterRarities[txtLower:match("^%s*(.-)%s*$")] then
+                                            local slotUID = "hotbar_" .. slot:GetFullName()
+                                            addChar(txtLower, nil, slotUID)
                                         end
                                     end
                                 end
@@ -2469,8 +2470,8 @@ local function scanPlayerCharacterInventory()
                     end
                 end
             end
-        end)
-    end
+        end
+    end)
     
     return rarityCounts, totalChars
 end

@@ -1,23 +1,39 @@
-# codejub
+# 🐰 CUPIE HUB Scripts & UI Framework
 
-# [TTeera]
+Welcome to **CUPIE HUB** repository! Here you can find the UI framework and game automation scripts.
 
-### Computational Mathematics Student & Software Developer
+---
 
-I am a third-year Computational Mathematics student with a strong foundation in algorithmic problem-solving and full-stack development. My experience spans building responsive web applications, designing user-centric interfaces, and applying technical skills in professional environments. I am passionate about leveraging mathematical principles and modern technologies to develop efficient software solutions.
+## 🚀 Quick Execution Links (Loadstrings)
 
-## Technical Expertise
+### 1. 🎰 Anime Roll To Fight (Full Automation Script)
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/codejub8-cloud/codejub/main/AnimeRoll.luau"))()
+```
 
-* **Languages:** TypeScript, JavaScript, HTML/CSS, [Add others, e.g., Python, SQL]
-* **Frameworks & Libraries:** React, [Add others, e.g., Node.js, Express]
-* **Design & Tools:** Figma, Git, UI/UX Prototyping, [Add others, e.g., Docker, Linux]
-* **Core Competencies:** Full-Stack Development, Network , System Troubleshooting, Algorithm Design
+---
 
-## Current Focus & Experience
+### 2. 🐰 CUPIEUI Framework (1-Line Minified)
+```lua
+local Cupie = loadstring(game:HttpGet("https://raw.githubusercontent.com/codejub8-cloud/codejub/main/CUPIEUI_MINIFIED.luau"))()
+```
 
-* **Academic Focus:** Pursuing coursework in Computational Mathematics, including Theory of Computation and Discrete Mathematics.
-* **Professional Experience:** Gaining practical experience through a Network internship at National Telecom (NT).
-* **Projects:** Developing scalable web interfaces and working on full-stack projects (e.g., OpenClaw, responsive e-commerce platforms) using React and TypeScript.
+---
 
+### 3. 🐰 CUPIEUI Framework (Standard Formatted)
+```lua
+local Cupie = loadstring(game:HttpGet("https://raw.githubusercontent.com/codejub8-cloud/codejub/main/CUPIEUI.luau"))()
+```
 
-# Hi 
+---
+
+## ✨ Features
+- **Auto Roll (Fast Summon)** with decimal precision speed delay
+- **Smart Auto Buy by Rarity** (Legendary+, Mythic+, God+, Secret+, etc.)
+- **Auto Equip Best Team** using direct in-game triggers
+- **Auto Level Up & Auto Evolve**
+- **15 In-Game Rarity Tiers** hierarchy
+- **Auto Delete / Sell Low Tier Units** (Common/Rare/Epic)
+- **Silent Lucky Wheel Spin** & Screen popup purger
+- **Instant Wave Advance & Max DPS Fast Attack Aura**
+- **Mobile / Tablet / PC Responsive GUI** with 6 themes

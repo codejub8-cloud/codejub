@@ -2043,146 +2043,116 @@ local invRarityPara = DashTab:CreateParagraph({
 -- ══════════════════════════════════════════════════════════
 
 -- Known Character Rarity Dictionary (Instant O(1) Lookup, No require hang)
+-- ══════════════════════════════════════════════════════════
+-- 15-TIER ANIME CHARACTER RARITY MATRIX & LIVE LOOKUP
+-- ══════════════════════════════════════════════════════════
+
 local CharacterRarities = {
-    -- Common
+    -- 1. Common
     ["luffy"] = "Common", ["luppi"] = "Common", ["zoro"] = "Common", ["sanji"] = "Common",
     ["nami"] = "Common", ["usopp"] = "Common", ["chopper"] = "Common", ["naruto"] = "Common",
     ["sasuke"] = "Common", ["sakura"] = "Common", ["ichigo"] = "Common", ["rukia"] = "Common",
     ["goku"] = "Common", ["vegeta"] = "Common", ["krillin"] = "Common", ["tanjiro"] = "Common",
     ["nezuko"] = "Common", ["zenitsu"] = "Common", ["inosuke"] = "Common", ["mob"] = "Common",
     ["reigen"] = "Common", ["rock lee"] = "Common", ["rocklee"] = "Common", ["shinra"] = "Common",
-    ["erwin"] = "Common", ["itadori"] = "Common", ["itadoro"] = "Common", ["fushiguro"] = "Common",
-    ["kugisaki"] = "Common", ["asta"] = "Common", ["yuno"] = "Common", ["deku"] = "Common",
-    ["bakugo"] = "Common", ["todoroki"] = "Common",
+    ["erwin"] = "Common", ["deku"] = "Common", ["bakugo"] = "Common", ["todoroki"] = "Common",
+    ["asta"] = "Common", ["yuno"] = "Common", ["kugisaki"] = "Common",
 
-    -- Rare
-    ["ace"] = "Rare", ["sabo"] = "Rare", ["law"] = "Rare", ["kid"] = "Rare",
-    ["kakashi"] = "Rare", ["gaara"] = "Rare", ["itachi"] = "Rare", ["renji"] = "Rare",
-    ["byakuya"] = "Rare", ["piccolo"] = "Rare", ["gohan"] = "Rare", ["trunks"] = "Rare",
-    ["rengoku"] = "Rare", ["tomioka"] = "Rare", ["shinobu"] = "Rare", ["maki"] = "Rare",
-    ["megumi"] = "Rare", ["nobara"] = "Rare", ["todo"] = "Rare", ["choso"] = "Rare",
+    -- 2. Rare
+    ["itadori"] = "Rare", ["itadoro"] = "Rare", ["ace"] = "Rare", ["sabo"] = "Rare",
+    ["law"] = "Rare", ["kid"] = "Rare", ["kakashi"] = "Rare", ["gaara"] = "Rare",
+    ["itachi"] = "Rare", ["renji"] = "Rare", ["byakuya"] = "Rare", ["piccolo"] = "Rare",
+    ["gohan"] = "Rare", ["trunks"] = "Rare", ["rengoku"] = "Rare", ["tomioka"] = "Rare",
+    ["shinobu"] = "Rare", ["maki"] = "Rare", ["megumi"] = "Rare", ["nobara"] = "Rare",
+    ["todo"] = "Rare", ["choso"] = "Rare", ["kaminari"] = "Rare", ["iida"] = "Rare",
 
-    -- Epic
+    -- 3. Epic
     ["whitebeard"] = "Epic", ["blackbeard"] = "Epic", ["shanks"] = "Epic", ["mihawk"] = "Epic",
     ["minato"] = "Epic", ["jiraiya"] = "Epic", ["tsunade"] = "Epic", ["orochimaru"] = "Epic",
     ["aizen"] = "Epic", ["kenpachi"] = "Epic", ["hitsugaya"] = "Epic", ["frieza"] = "Epic",
     ["cell"] = "Epic", ["buu"] = "Epic", ["akaza"] = "Epic", ["douma"] = "Epic",
-    ["kokushibo"] = "Epic", ["sukuna"] = "Epic", ["gojo"] = "Epic", ["geto"] = "Epic",
-    ["toji"] = "Epic", ["yuta"] = "Epic", ["saitama"] = "Epic", ["genos"] = "Epic",
+    ["kokushibo"] = "Epic", ["saitama"] = "Epic", ["genos"] = "Epic", ["all might"] = "Epic",
+    ["allmight"] = "Epic", ["endeavor"] = "Epic", ["dabi"] = "Epic", ["shigaraki"] = "Epic",
 
-    -- Legendary
-    ["roger"] = "Legendary", ["kaido"] = "Legendary", ["bigmom"] = "Legendary", ["garp"] = "Legendary",
-    ["madara"] = "Legendary", ["hashirama"] = "Legendary", ["obito"] = "Legendary", ["pain"] = "Legendary",
-    ["yamamoto"] = "Legendary", ["yhwach"] = "Legendary", ["beerus"] = "Legendary", ["whis"] = "Legendary",
-    ["muzan"] = "Legendary", ["yoruichi"] = "Legendary", ["boros"] = "Legendary", ["garou"] = "Legendary"
+    -- 4. Legendary
+    ["roger"] = "Legendary", ["gol d roger"] = "Legendary", ["kaido"] = "Legendary",
+    ["bigmom"] = "Legendary", ["big mom"] = "Legendary", ["garp"] = "Legendary",
+    ["madara"] = "Legendary", ["hashirama"] = "Legendary", ["obito"] = "Legendary",
+    ["pain"] = "Legendary", ["nagato"] = "Legendary", ["yamamoto"] = "Legendary",
+    ["yhwach"] = "Legendary", ["beerus"] = "Legendary", ["whis"] = "Legendary",
+    ["muzan"] = "Legendary", ["yoruichi"] = "Legendary", ["boros"] = "Legendary",
+    ["garou"] = "Legendary", ["gojo"] = "Legendary", ["sukuna"] = "Legendary",
+    ["toji"] = "Legendary", ["yuta"] = "Legendary", ["ainz"] = "Legendary",
+
+    -- 5. Mythic
+    ["goku black"] = "Mythic", ["gokublack"] = "Mythic", ["broly"] = "Mythic",
+    ["gogeta"] = "Mythic", ["vegito"] = "Mythic", ["gear 5"] = "Mythic", ["gear5"] = "Mythic",
+    ["nika"] = "Mythic", ["sun god"] = "Mythic", ["kaguya"] = "Mythic", ["hagoromo"] = "Mythic",
+    ["isshiki"] = "Mythic", ["mugetsu"] = "Mythic", ["bankai ichigo"] = "Mythic",
+    ["sung jinwoo"] = "Mythic", ["shadow monarch"] = "Mythic", ["eren founder"] = "Mythic",
+
+    -- 6. God
+    ["zeno"] = "God", ["grand priest"] = "God", ["super shenron"] = "God",
+    ["rimuru"] = "God", ["rimuru tempest"] = "God", ["anos"] = "God", ["anos voldigoad"] = "God",
+    ["anti spiral"] = "God", ["antispiral"] = "God", ["featherine"] = "God",
+
+    -- 7. Godly
+    ["godly luffy"] = "Godly", ["godly goku"] = "Godly", ["godly naruto"] = "Godly",
+    ["godly gojo"] = "Godly", ["godly sukuna"] = "Godly", ["godly saitama"] = "Godly",
+
+    -- 8. Godlyx
+    ["godlyx"] = "Godlyx", ["godlyx void"] = "Godlyx", ["godlyx infinity"] = "Godlyx",
+    ["godlyx cosmic"] = "Godlyx", ["godlyx chaos"] = "Godlyx",
+
+    -- 9. Secret
+    ["secret"] = "Secret", ["shadow secret"] = "Secret", ["celestial"] = "Secret",
+    ["unknown"] = "Secret", ["hidden"] = "Secret",
+
+    -- 10. Divine
+    ["divine"] = "Divine", ["divine creator"] = "Divine", ["divine sovereign"] = "Divine",
+    ["seraph"] = "Divine", ["archangel"] = "Divine",
+
+    -- 11. Immortal
+    ["immortal"] = "Immortal", ["immortal emperor"] = "Immortal", ["immortal dragon"] = "Immortal",
+
+    -- 12. OP
+    ["op"] = "OP", ["op titan"] = "OP", ["overpowered"] = "OP",
+
+    -- 13. OG
+    ["og"] = "OG", ["og king"] = "OG", ["og prime"] = "OG", ["ancient"] = "OG",
+
+    -- 14. INVASION
+    ["invasion"] = "INVASION", ["invasion boss"] = "INVASION", ["alien invasion"] = "INVASION",
+
+    -- 15. Limited
+    ["limited"] = "Limited", ["event"] = "Limited", ["vip"] = "Limited", ["exclusive"] = "Limited"
 }
 
--- Fast Number Formatting (e.g. 1,250,000)
-local function formatNumberWithCommas(amount)
-    local formatted = tostring(amount or "0"):gsub("[^%d]", "")
-    if formatted == "" then formatted = "0" end
-    local k
-    while true do
-        formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
-        if k == 0 then break end
-    end
-    return formatted
-end
-
--- Fast Direct Currency Scanner (Instant O(1), No Descendants Traverse)
-local function getPlayerCurrencies()
-    local gold = nil
-    local gems = nil
-    local wins = nil
-    
-    -- 1. Direct Leaderstats check
-    local ls = LocalPlayer:FindFirstChild("leaderstats")
-    if ls then
-        for _, child in ipairs(ls:GetChildren()) do
-            local n = child.Name:lower()
-            local val = tostring(child.Value or (child:IsA("ValueBase") and child.Value) or "")
-            if val ~= "" and val ~= "nil" then
-                if n:find("gold") or n:find("coin") or n:find("money") or n:find("cash") then
-                    gold = val
-                elseif n:find("gem") or n:find("diamond") then
-                    gems = val
-                elseif n:find("win") or n:find("level") or n:find("stage") or n:find("wave") then
-                    wins = val
-                end
-            end
-        end
-    end
-    
-    -- 2. Direct Player Attributes check
-    if not gold or not gems or not wins then
-        local attrs = LocalPlayer:GetAttributes()
-        for k, v in pairs(attrs) do
-            local n = tostring(k):lower()
-            local val = tostring(v)
-            if val ~= "" and val ~= "nil" then
-                if not gold and (n:find("gold") or n:find("coin") or n:find("money") or n:find("cash")) then
-                    gold = val
-                elseif not gems and (n:find("gem") or n:find("diamond")) then
-                    gems = val
-                elseif not wins and (n:find("win") or n:find("level") or n:find("stage") or n:find("wave")) then
-                    wins = val
-                end
-            end
-        end
-    end
-    
-    -- 3. Direct Data / PlayerData folder check
-    if not gold or not gems or not wins then
-        local df = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData") or LocalPlayer:FindFirstChild("Stats")
-        if df then
-            for _, child in ipairs(df:GetChildren()) do
-                local n = child.Name:lower()
-                local val = tostring(child.Value or (child:IsA("ValueBase") and child.Value) or "")
-                if val ~= "" and val ~= "nil" then
-                    if not gold and (n:find("gold") or n:find("coin") or n:find("money") or n:find("cash")) then
-                        gold = val
-                    elseif not gems and (n:find("gem") or n:find("diamond")) then
-                        gems = val
-                    elseif not wins and (n:find("win") or n:find("level") or n:find("stage") or n:find("wave")) then
-                        wins = val
-                    end
-                end
-            end
-            for k, v in pairs(df:GetAttributes()) do
-                local n = tostring(k):lower()
-                local val = tostring(v)
-                if not gold and (n:find("gold") or n:find("coin") or n:find("money")) then gold = val
-                elseif not gems and (n:find("gem") or n:find("diamond")) then gems = val
-                elseif not wins and (n:find("win") or n:find("level") or n:find("stage")) then wins = val
-                end
-            end
-        end
-    end
-
-    -- 4. Direct Fast UI Checks (Specific known HUD frames only)
-    if not gold or gold == "0" then
-        local pGui = LocalPlayer:FindFirstChild("PlayerGui")
-        if pGui then
-            local mainGui = pGui:FindFirstChild("MainGui") or pGui:FindFirstChild("ScreenGui") or pGui:FindFirstChild("HUD") or pGui:FindFirstChild("Main")
-            if mainGui then
-                for _, ch in ipairs(mainGui:GetChildren()) do
-                    if ch:IsA("Frame") or ch:IsA("TextLabel") then
-                        local n = ch.Name:lower()
-                        if ch:IsA("TextLabel") and ch.Text:match("%d") then
-                            if n:find("gold") or n:find("coin") then gold = ch.Text end
-                            if n:find("gem") or n:find("diamond") then gems = ch.Text end
-                            if n:find("win") or n:find("level") then wins = ch.Text end
-                        end
+-- Asynchronous Module Cache for In-Game Exact Data
+local CachedModuleRarities = {}
+task.spawn(function()
+    pcall(function()
+        local cInfoMod = ReplicatedStorage:WaitForChild("Modules", 3) 
+            and ReplicatedStorage.Modules:WaitForChild("Characters", 3) 
+            and ReplicatedStorage.Modules.Characters:WaitForChild("CharactersInfo", 3)
+        if cInfoMod then
+            local info = require(cInfoMod)
+            if type(info) == "table" then
+                local chars = info.Characters or info
+                for cName, cData in pairs(chars) do
+                    if type(cData) == "table" and cData.Rarity then
+                        CachedModuleRarities[tostring(cName):lower()] = tostring(cData.Rarity)
+                    elseif type(cData) == "string" then
+                        CachedModuleRarities[tostring(cName):lower()] = cData
                     end
                 end
             end
         end
-    end
-    
-    return tostring(gold or "0"), tostring(gems or "0"), tostring(wins or "0")
-end
+    end)
+end)
 
--- Fast Direct Character Inventory Scanner (Multi-Source: Hotbar, Inventory, Plot, Data)
+
+-- Fast Direct Character Inventory Scanner (Accurate 15-Rarity Classification)
 local function scanPlayerCharacterInventory()
     local rarityCounts = {
         ["Limited"]   = 0,
@@ -2203,37 +2173,63 @@ local function scanPlayerCharacterInventory()
     }
     local totalChars = 0
 
+    local function resolveRarity(rawName, explicitRarity)
+        if explicitRarity and rarityCounts[explicitRarity] then
+            return explicitRarity
+        end
+        if explicitRarity and type(explicitRarity) == "string" then
+            for rName in pairs(rarityCounts) do
+                if explicitRarity:lower() == rName:lower() then
+                    return rName
+                end
+            end
+        end
+
+        local nClean = tostring(rawName or ""):lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " ")
+        local nTrim = nClean:match("^%s*(.-)%s*$") or ""
+        if nTrim == "" then return nil end
+
+        -- 1. Check live game module cache
+        if CachedModuleRarities[nTrim] and rarityCounts[CachedModuleRarities[nTrim]] then
+            return CachedModuleRarities[nTrim]
+        end
+
+        -- 2. Check exact character matrix dictionary
+        if CharacterRarities[nTrim] and rarityCounts[CharacterRarities[nTrim]] then
+            return CharacterRarities[nTrim]
+        end
+
+        -- 3. Check partial key match in character matrix
+        for charKey, rVal in pairs(CharacterRarities) do
+            if (nTrim:find(charKey, 1, true) or charKey:find(nTrim, 1, true)) and rarityCounts[rVal] then
+                return rVal
+            end
+        end
+
+        -- 4. Check if name contains rarity word
+        for rName in pairs(rarityCounts) do
+            if nTrim:find(rName:lower(), 1, true) then
+                return rName
+            end
+        end
+
+        return "Common"
+    end
+
     local function addChar(name, explicitRarity)
         if not name or name == "" then return end
         local raw = tostring(name):lower()
-        -- Strip level and extraneous symbols
         local nClean = raw:gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " ")
         local nTrim = nClean:match("^%s*(.-)%s*$") or ""
-        if nTrim == "" or nTrim == "gold" or nTrim == "level" or nTrim == "slot" or nTrim == "button" or nTrim == "image" then
+        if nTrim == "" or nTrim == "gold" or nTrim == "level" or nTrim == "slot" or nTrim == "button" or nTrim == "image" or nTrim == "frame" then
             return
         end
         
-        local rStr = explicitRarity or CharacterRarities[nTrim]
-        if not rStr then
-            for charKey, rVal in pairs(CharacterRarities) do
-                if nTrim:find(charKey) or charKey:find(nTrim) then
-                    rStr = rVal
-                    break
-                end
-            end
+        local finalRarity = resolveRarity(nTrim, explicitRarity)
+        if finalRarity and rarityCounts[finalRarity] then
+            totalChars = totalChars + 1
+            rarityCounts[finalRarity] = rarityCounts[finalRarity] + 1
         end
-        if not rStr then
-            for rName in pairs(rarityCounts) do
-                if nTrim:find(rName:lower()) then
-                    rStr = rName
-                    break
-                end
-            end
-        end
-        rStr = rStr or "Common"
-        
-        totalChars = totalChars + 1
-        rarityCounts[rStr] = (rarityCounts[rStr] or 0) + 1
     end
     
     local foundInData = false
@@ -2247,8 +2243,8 @@ local function scanPlayerCharacterInventory()
                 if sub and #sub:GetChildren() > 0 then
                     foundInData = true
                     for _, item in ipairs(sub:GetChildren()) do
-                        local attrR = item:GetAttribute("Rarity")
-                        local rChild = item:FindFirstChild("Rarity")
+                        local attrR = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
+                        local rChild = item:FindFirstChild("Rarity") or item:FindFirstChild("Tier")
                         local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
                         addChar(item.Name, rVal)
                     end
@@ -2265,8 +2261,8 @@ local function scanPlayerCharacterInventory()
                 if sub and #sub:GetChildren() > 0 then
                     foundInData = true
                     for _, item in ipairs(sub:GetChildren()) do
-                        local attrR = item:GetAttribute("Rarity")
-                        local rChild = item:FindFirstChild("Rarity")
+                        local attrR = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
+                        local rChild = item:FindFirstChild("Rarity") or item:FindFirstChild("Tier")
                         local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
                         addChar(item.Name, rVal)
                     end
@@ -2282,7 +2278,7 @@ local function scanPlayerCharacterInventory()
             for _, ch in ipairs(plot:GetChildren()) do
                 if ch:IsA("Model") and ch ~= LocalPlayer.Character and (ch:FindFirstChild("Humanoid") or ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChild("Head") or CharacterRarities[ch.Name:lower()]) then
                     if not foundInData then
-                        local chRarity = ch:GetAttribute("Rarity")
+                        local chRarity = ch:GetAttribute("Rarity") or ch:GetAttribute("Tier")
                         addChar(ch.Name, chRarity)
                     end
                 end
@@ -2291,7 +2287,7 @@ local function scanPlayerCharacterInventory()
             if charFolder then
                 for _, ch in ipairs(charFolder:GetChildren()) do
                     if ch:IsA("Model") and not foundInData then
-                        local chRarity = ch:GetAttribute("Rarity")
+                        local chRarity = ch:GetAttribute("Rarity") or ch:GetAttribute("Tier")
                         addChar(ch.Name, chRarity)
                     end
                 end
@@ -2306,16 +2302,15 @@ local function scanPlayerCharacterInventory()
             if pGui then
                 for _, g in ipairs(pGui:GetChildren()) do
                     if g:IsA("ScreenGui") and g.Name ~= "CUPIEUI" and g.Enabled then
-                        -- Scan for character labels
                         for _, desc in ipairs(g:GetDescendants()) do
                             if desc:IsA("TextLabel") and desc.Visible and desc.Text ~= "" then
                                 local txt = desc.Text
                                 local txtLower = txt:lower()
-                                -- Exclude money, levels, numbers, common UI buttons
                                 if not txt:match("^%d+$") and not txtLower:find("boost") and not txtLower:find("pass") and not txtLower:find("shop") and not txtLower:find("index") and not txtLower:find("trade") and not txtLower:find("item") and not txtLower:find("profile") and not txtLower:find("fps") and not txtLower:find("ms") then
                                     for charKey, rVal in pairs(CharacterRarities) do
-                                        if txtLower == charKey or txtLower:find(charKey) then
-                                            addChar(txtLower, rVal)
+                                        if txtLower == charKey or txtLower:find(charKey, 1, true) then
+                                            local explicitR = desc:GetAttribute("Rarity") or (desc.Parent and desc.Parent:GetAttribute("Rarity"))
+                                            addChar(txtLower, explicitR or rVal)
                                             break
                                         end
                                     end
@@ -2330,6 +2325,7 @@ local function scanPlayerCharacterInventory()
     
     return rarityCounts, totalChars
 end
+
 
 -- Live Stats Updater Loop
 local function updateDashboardStats(startTime)

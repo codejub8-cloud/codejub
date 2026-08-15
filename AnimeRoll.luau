@@ -2138,17 +2138,16 @@ GachaTab:CreateSlider({
         if Config.AutoRoll then
             Cupie:StopLoop("AutoRollLoop")
             Cupie:StartLoop("AutoRollLoop", Config.RollDelay, function()
-                local p = getMyPlot()
-                if p and p:FindFirstChild("Roll") then
-                    local rollBtn = p.Roll:FindFirstChild("RollButton")
-                    if rollBtn and rollBtn:FindFirstChild("Button") then
-                        local btn = rollBtn.Button
-                        ensureSmoothPadPosition(btn)
-                        local prompt = btn:FindFirstChild("RollPrompt") or btn:FindFirstChildWhichIsA("ProximityPrompt", true)
-                        if prompt then firePrompt(prompt) end
-                    end
-                end
+                local plot = getMyPlot()
+                local prompt, btn = getPlotRollPrompt(plot)
+                if prompt then firePrompt(prompt) end
                 if CharactersRoll then pcall(function() CharactersRoll:FireServer() end) end
+                if Config.AutoBuyByRarity then
+                    task.defer(function()
+                        task.wait(0.1)
+                        executeSmartAutoBuy()
+                    end)
+                end
             end)
         end
     end

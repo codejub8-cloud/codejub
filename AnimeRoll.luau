@@ -2913,38 +2913,6 @@ GachaTab:CreateToggle({
     end
 })
 
-GachaTab:CreateDropdown({
-    Name = "Target Stop Rarity",
-    Description = "Stops Auto Roll when rolled character reaches this rarity",
-    Options = {
-        "Legendary & Above",
-        "Mythic & Above",
-        "God & Above",
-        "Godly & Above",
-        "Godlyx & Above",
-        "Secret & Above",
-        "Divine & Above",
-        "Immortal & Above",
-        "OP & Above",
-        "OG & Above",
-        "INVASION & Above",
-        "Limited Only"
-    },
-    Default = "Mythic & Above",
-    Callback = function(choice)
-        Config.StopRarityTarget = choice
-    end
-})
-
-GachaTab:CreateToggle({
-    Name = "Stop Roll on Target Rarity",
-    Description = "Automatically pauses rolling and alerts you when target unit is obtained",
-    Default = false,
-    Callback = function(state)
-        Config.TargetRarityFilter = state
-    end
-})
-
 GachaTab:CreateToggle({
     Name = "Auto Spin Wheel (Silent)",
     Description = "Spins wheel continuously without popup notifications",

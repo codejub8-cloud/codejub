@@ -2182,7 +2182,7 @@ local function getPlayerCurrencies()
     return tostring(gold or "0"), tostring(gems or "0"), tostring(wins or "0")
 end
 
--- Fast Direct Character Inventory Scanner (Instant O(N), Multi-Source)
+-- Fast Direct Character Inventory Scanner (Multi-Source: Hotbar, Inventory, Plot, Data)
 local function scanPlayerCharacterInventory()
     local rarityCounts = {
         ["Limited"]   = 0,
@@ -2202,26 +2202,30 @@ local function scanPlayerCharacterInventory()
         ["Common"]    = 0
     }
     local totalChars = 0
-    local scannedItems = {}
 
     local function addChar(name, explicitRarity)
         if not name or name == "" then return end
-        local nLower = tostring(name):lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)]", ""):match("^%s*(.-)%s*$")
-        if nLower == "" then return end
+        local raw = tostring(name):lower()
+        -- Strip level and extraneous symbols
+        local nClean = raw:gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " ")
+        local nTrim = nClean:match("^%s*(.-)%s*$") or ""
+        if nTrim == "" or nTrim == "gold" or nTrim == "level" or nTrim == "slot" or nTrim == "button" or nTrim == "image" then
+            return
+        end
         
-        local rStr = explicitRarity or CharacterRarities[nLower]
+        local rStr = explicitRarity or CharacterRarities[nTrim]
         if not rStr then
-            for rName in pairs(rarityCounts) do
-                if nLower:find(rName:lower()) then
-                    rStr = rName
+            for charKey, rVal in pairs(CharacterRarities) do
+                if nTrim:find(charKey) or charKey:find(nTrim) then
+                    rStr = rVal
                     break
                 end
             end
         end
         if not rStr then
-            for charKey, rVal in pairs(CharacterRarities) do
-                if nLower:find(charKey) or charKey:find(nLower) then
-                    rStr = rVal
+            for rName in pairs(rarityCounts) do
+                if nTrim:find(rName:lower()) then
+                    rStr = rName
                     break
                 end
             end
@@ -2232,13 +2236,16 @@ local function scanPlayerCharacterInventory()
         rarityCounts[rStr] = (rarityCounts[rStr] or 0) + 1
     end
     
-    -- 1. Scan Data Folder (Inventory, Characters, Hotbar, Units)
+    local foundInData = false
+
+    -- 1. Scan Data / PlayerData Folder
     pcall(function()
         local dataFolder = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData")
         if dataFolder then
-            for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped"}) do
+            for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped", "Team"}) do
                 local sub = dataFolder:FindFirstChild(folderName)
-                if sub then
+                if sub and #sub:GetChildren() > 0 then
+                    foundInData = true
                     for _, item in ipairs(sub:GetChildren()) do
                         local attrR = item:GetAttribute("Rarity")
                         local rChild = item:FindFirstChild("Rarity")
@@ -2250,46 +2257,67 @@ local function scanPlayerCharacterInventory()
         end
     end)
     
-    -- 2. Scan LocalPlayer direct folders
+    -- 2. Scan LocalPlayer Direct Folders
+    if not foundInData then
+        pcall(function()
+            for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped"}) do
+                local sub = LocalPlayer:FindFirstChild(folderName)
+                if sub and #sub:GetChildren() > 0 then
+                    foundInData = true
+                    for _, item in ipairs(sub:GetChildren()) do
+                        local attrR = item:GetAttribute("Rarity")
+                        local rChild = item:FindFirstChild("Rarity")
+                        local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
+                        addChar(item.Name, rVal)
+                    end
+                end
+            end
+        end)
+    end
+
+    -- 3. Scan Placed / Deployed Characters on Plot
     pcall(function()
-        for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units"}) do
-            local sub = LocalPlayer:FindFirstChild(folderName)
-            if sub then
-                for _, item in ipairs(sub:GetChildren()) do
-                    local attrR = item:GetAttribute("Rarity")
-                    local rChild = item:FindFirstChild("Rarity")
-                    local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
-                    addChar(item.Name, rVal)
+        local plot = getMyPlot()
+        if plot then
+            for _, ch in ipairs(plot:GetChildren()) do
+                if ch:IsA("Model") and ch ~= LocalPlayer.Character and (ch:FindFirstChild("Humanoid") or ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChild("Head") or CharacterRarities[ch.Name:lower()]) then
+                    if not foundInData then
+                        local chRarity = ch:GetAttribute("Rarity")
+                        addChar(ch.Name, chRarity)
+                    end
+                end
+            end
+            local charFolder = plot:FindFirstChild("Characters") or plot:FindFirstChild("PlacedCharacters") or plot:FindFirstChild("Units")
+            if charFolder then
+                for _, ch in ipairs(charFolder:GetChildren()) do
+                    if ch:IsA("Model") and not foundInData then
+                        local chRarity = ch:GetAttribute("Rarity")
+                        addChar(ch.Name, chRarity)
+                    end
                 end
             end
         end
     end)
-    
-    -- 3. Scan PlacedCharacters on plot
-    pcall(function()
-        local plot = getMyPlot()
-        if plot and plot:FindFirstChild("PlacedCharacters") then
-            for _, ch in ipairs(plot.PlacedCharacters:GetChildren()) do
-                local chRarity = ch:GetAttribute("Rarity")
-                addChar(ch.Name, chRarity)
-            end
-        end
-    end)
 
-    -- 4. Fallback: Scan Hotbar GUI elements if total is 0
+    -- 4. Deep Scan PlayerGui Hotbar & Character Cards (Visual Ground Truth)
     if totalChars == 0 then
         pcall(function()
             local pGui = LocalPlayer:FindFirstChild("PlayerGui")
             if pGui then
                 for _, g in ipairs(pGui:GetChildren()) do
-                    if g:IsA("ScreenGui") and g.Name ~= "CUPIEUI" then
-                        local hotbar = g:FindFirstChild("Hotbar", true) or g:FindFirstChild("Slots", true) or g:FindFirstChild("Equipped", true)
-                        if hotbar then
-                            for _, slot in ipairs(hotbar:GetChildren()) do
-                                if slot:IsA("GuiObject") and slot.Visible then
-                                    local nameLabel = slot:FindFirstChildWhichIsA("TextLabel", true)
-                                    if nameLabel and nameLabel.Text ~= "" and not nameLabel.Text:match("^%d+$") then
-                                        addChar(nameLabel.Text)
+                    if g:IsA("ScreenGui") and g.Name ~= "CUPIEUI" and g.Enabled then
+                        -- Scan for character labels
+                        for _, desc in ipairs(g:GetDescendants()) do
+                            if desc:IsA("TextLabel") and desc.Visible and desc.Text ~= "" then
+                                local txt = desc.Text
+                                local txtLower = txt:lower()
+                                -- Exclude money, levels, numbers, common UI buttons
+                                if not txt:match("^%d+$") and not txtLower:find("boost") and not txtLower:find("pass") and not txtLower:find("shop") and not txtLower:find("index") and not txtLower:find("trade") and not txtLower:find("item") and not txtLower:find("profile") and not txtLower:find("fps") and not txtLower:find("ms") then
+                                    for charKey, rVal in pairs(CharacterRarities) do
+                                        if txtLower == charKey or txtLower:find(charKey) then
+                                            addChar(txtLower, rVal)
+                                            break
+                                        end
                                     end
                                 end
                             end
@@ -2302,7 +2330,6 @@ local function scanPlayerCharacterInventory()
     
     return rarityCounts, totalChars
 end
-
 
 -- Live Stats Updater Loop
 local function updateDashboardStats(startTime)

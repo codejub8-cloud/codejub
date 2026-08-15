@@ -1363,6 +1363,136 @@ function Cupie:CreateWindow(config)
             return container
         end
 
+        
+        function Tab:CreateMultiDropdown(opts)
+            local title    = opts.Name or "Multi Dropdown"
+            local options  = opts.Options or {}
+            local selected = opts.Default or {}
+            local callback = opts.Callback
+            local order    = opts.LayoutOrder or 0
+            local expanded = false
+
+            local selMap = {}
+            if type(selected) == "table" then
+                for k, v in pairs(selected) do
+                    if type(k) == "number" then selMap[v] = true
+                    elseif v == true then selMap[k] = true end
+                end
+            elseif type(selected) == "string" and selected ~= "" then
+                selMap[selected] = true
+            end
+
+            local function getSummaryText()
+                local count = 0
+                local names = {}
+                for _, opt in ipairs(options) do
+                    if selMap[opt] then
+                        count = count + 1
+                        table.insert(names, opt)
+                    end
+                end
+                if count == 0 then return "None Selected v"
+                elseif count == #options then return "All (" .. count .. ") v"
+                elseif count <= 2 then return table.concat(names, ", ") .. " v"
+                else return count .. " Selected v" end
+            end
+
+            local container = Instance.new("Frame")
+            container.Size = UDim2.new(1, 0, 0, 38)
+            container.BackgroundColor3 = Cupie.C.card
+            container.BorderSizePixel = 0
+            container.LayoutOrder = order
+            container.ClipsDescendants = true
+            container.Parent = page
+            Instance.new("UICorner", container).CornerRadius = UDim.new(0, 8)
+
+            local cStroke = Instance.new("UIStroke", container)
+            cStroke.Color = Cupie.C.border
+            cStroke.Thickness = 1
+            Cupie:RegisterTheme(container, "BackgroundColor3", "card")
+            Cupie:RegisterTheme(cStroke, "Color", "border")
+
+            local headerBtn = Instance.new("TextButton")
+            headerBtn.AutoLocalize = false
+            headerBtn.Text = ""
+            headerBtn.Size = UDim2.new(1, 0, 0, 38)
+            headerBtn.BackgroundTransparency = 1
+            headerBtn.Parent = container
+
+            local titleLbl = Instance.new("TextLabel")
+            titleLbl.AutoLocalize = false
+            titleLbl.Text = title
+            titleLbl.Font = Enum.Font.GothamMedium
+            titleLbl.TextSize = 12
+            titleLbl.TextColor3 = Cupie.C.text
+            titleLbl.BackgroundTransparency = 1
+            titleLbl.Size = UDim2.new(0.42, 0, 1, 0)
+            titleLbl.Position = UDim2.fromOffset(12, 0)
+            titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+            titleLbl.Parent = headerBtn
+            Cupie:RegisterTheme(titleLbl, "TextColor3", "text")
+
+            local curValLbl = Instance.new("TextLabel")
+            curValLbl.AutoLocalize = false
+            curValLbl.Text = getSummaryText()
+            curValLbl.Font = Enum.Font.GothamBold
+            curValLbl.TextSize = 11
+            curValLbl.TextColor3 = Cupie.C.accent
+            curValLbl.BackgroundTransparency = 1
+            curValLbl.Size = UDim2.new(0.58, -16, 1, 0)
+            curValLbl.Position = UDim2.new(0.42, 0, 0, 0)
+            curValLbl.TextXAlignment = Enum.TextXAlignment.Right
+            curValLbl.Parent = headerBtn
+            Cupie:RegisterTheme(curValLbl, "TextColor3", "accent")
+
+            local optHolder = Instance.new("Frame")
+            optHolder.Size = UDim2.new(1, -24, 0, #options * 28)
+            optHolder.Position = UDim2.fromOffset(12, 40)
+            optHolder.BackgroundTransparency = 1
+            optHolder.Parent = container
+
+            local optLayout = Instance.new("UIListLayout", optHolder)
+            optLayout.Padding = UDim.new(0, 3)
+
+            for _, optName in ipairs(options) do
+                local optBtn = Instance.new("TextButton")
+                optBtn.AutoLocalize = false
+                local isSel = (selMap[optName] == true)
+                optBtn.Text = (isSel and "  [✓] " or "  [  ] ") .. optName
+                optBtn.Font = Enum.Font.Gotham
+                optBtn.TextSize = 11
+                optBtn.TextColor3 = isSel and Cupie.C.accent or Cupie.C.dim
+                optBtn.BackgroundColor3 = isSel and Cupie.C.hover or Cupie.C.sidebar
+                optBtn.Size = UDim2.new(1, 0, 0, 25)
+                optBtn.TextXAlignment = Enum.TextXAlignment.Left
+                optBtn.BorderSizePixel = 0
+                optBtn.Parent = optHolder
+                Instance.new("UICorner", optBtn).CornerRadius = UDim.new(0, 5)
+
+                optBtn.MouseButton1Click:Connect(function()
+                    selMap[optName] = not selMap[optName]
+                    local newSel = selMap[optName]
+                    optBtn.Text = (newSel and "  [✓] " or "  [  ] ") .. optName
+                    optBtn.TextColor3 = newSel and Cupie.C.accent or Cupie.C.dim
+                    optBtn.BackgroundColor3 = newSel and Cupie.C.hover or Cupie.C.sidebar
+                    local sumText = getSummaryText()
+                    curValLbl.Text = sumText:gsub(" v", expanded and " ^" or " v")
+                    if callback then callback(selMap) end
+                end)
+            end
+
+            headerBtn.MouseButton1Click:Connect(function()
+                expanded = not expanded
+                local targetH = expanded and (44 + #options * 28) or 38
+                local sumText = getSummaryText()
+                curValLbl.Text = sumText:gsub(" v", expanded and " ^" or " v")
+                TweenService:Create(container, TweenInfo.new(0.2, Enum.EasingStyle.Quint), {
+                    Size = UDim2.new(1, 0, 0, targetH)
+                }):Play()
+            end)
+            return container
+        end
+
         function Tab:CreateKeybind(opts)
             local title    = opts.Name or "Keybind"
             local curKey   = opts.Default or Enum.KeyCode.RightControl
@@ -1636,7 +1766,20 @@ local Config = {
     
     -- Smart Auto Buy by Rarity
     AutoBuyByRarity     = false,
-    BuyRuleRarity       = "Mythic & Above",
+    SelectedBuyRarities = {
+        ["Common"]    = true,
+        ["Rare"]      = true,
+        ["Epic"]      = true,
+        ["Legendary"] = true,
+        ["Mythic"]    = true,
+        ["Secret"]    = true,
+        ["God"]       = true,
+        ["Limited"]   = true
+    },
+    SelectedBuyMutations = {
+        ["Gold"]      = true,
+        ["Astronaut"] = true
+    },
     BuyRuleTier         = "All Tiers",
     
     -- Auto Sell Rarity Selection
@@ -2002,81 +2145,59 @@ end
 
 
 -- ══════════════════════════════════════════════════════════
--- SMART AUTO BUY (WITH BUILT-IN GOLD CHECK & BUY WAIT)
+-- SMART AUTO BUY (WITH TRUE MULTI-SELECT RARITIES & MUTATIONS)
 -- ══════════════════════════════════════════════════════════
 
 local function executeSmartAutoBuy()
-    local rMode = Config.AutoBuyRarityMode or "Common & Above (Buy All)"
-    local mMode = Config.AutoBuyMutationMode or "Disabled (Ignore Mutations)"
-
     local function checkMatches(unitName, unitRarity, unitMutation)
-        local rRank = RarityOrder[unitRarity] or 1
-        local mutStr = tostring(unitMutation or ""):lower()
-
-        -- 1. Evaluate Rarity Filter
         local rPass = false
-        if rMode == "Disabled (Ignore Rarity)" then
-            rPass = false
-        elseif rMode == "Common & Above (Buy All)" or rMode == "Common & Above" then
-            rPass = true
-        elseif rMode == "Rare & Above" then
-            rPass = rRank >= 2
-        elseif rMode == "Epic & Above" then
-            rPass = rRank >= 3
-        elseif rMode == "Legendary & Above" then
-            rPass = rRank >= 4
-        elseif rMode == "Mythic & Above" then
-            rPass = rRank >= 5
-        elseif rMode == "Secret & Above" then
-            rPass = rRank >= 6
-        elseif rMode == "God & Above" then
-            rPass = rRank >= 7
-        elseif rMode == "Limited Only" then
-            rPass = (unitRarity == "Limited")
-        elseif rMode:find("Specific") then
-            local target = rMode:match("Specific%s*:%s*(%w+)")
-            if target and unitRarity and unitRarity:lower() == target:lower() then
-                rPass = true
-            end
-        else
-            rPass = true
-        end
-
-        -- 2. Evaluate Mutation Filter
         local mPass = false
-        if mMode == "Disabled (Ignore Mutations)" then
-            mPass = false
-        elseif mMode == "Any Mutation (Gold, Diamond, Astronaut, etc.)" or mMode == "Any Mutation" then
-            mPass = (mutStr ~= "" and mutStr ~= "nil" and mutStr ~= "none")
-        elseif mMode == "Gold Only" then
-            mPass = mutStr:find("gold") ~= nil
-        elseif mMode == "Diamond Only" then
-            mPass = mutStr:find("diamond") ~= nil
-        elseif mMode == "Astronaut Only" then
-            mPass = (mutStr:find("astronaut") ~= nil or mutStr:find("cosmic") ~= nil)
-        elseif mMode == "Gold + Astronaut" then
-            mPass = (mutStr:find("gold") ~= nil or mutStr:find("astronaut") ~= nil or mutStr:find("cosmic") ~= nil)
-        elseif mMode == "Gold + Diamond + Astronaut" then
-            mPass = (mutStr:find("gold") ~= nil or mutStr:find("diamond") ~= nil or mutStr:find("astronaut") ~= nil or mutStr:find("cosmic") ~= nil)
-        elseif mMode == "Cursed Only" then
-            mPass = mutStr:find("cursed") ~= nil
-        elseif mMode == "Slayer Only" then
-            mPass = mutStr:find("slayer") ~= nil
-        elseif mMode == "Hollow Only" then
-            mPass = mutStr:find("hollow") ~= nil
-        elseif mMode == "Destroyer Only" then
-            mPass = mutStr:find("destroyer") ~= nil
-        elseif mMode == "Demon Only" then
-            mPass = mutStr:find("demon") ~= nil
+
+        -- 1. Check Multi-Selected Rarities (e.g. Common, Rare, Epic, Legendary, Mythic, Secret, God, Limited)
+        if Config.SelectedBuyRarities and type(Config.SelectedBuyRarities) == "table" then
+            if Config.SelectedBuyRarities[unitRarity] == true then
+                rPass = true
+            else
+                for rName, enabled in pairs(Config.SelectedBuyRarities) do
+                    if enabled and unitRarity and unitRarity:lower() == rName:lower() then
+                        rPass = true
+                        break
+                    end
+                end
+            end
         end
 
-        -- 3. Match Logic: Buy if matches Rarity OR matches Mutation
-        if rMode == "Disabled (Ignore Rarity)" then
-            return mPass
-        elseif mMode == "Disabled (Ignore Mutations)" then
-            return rPass
-        else
+        -- 2. Check Multi-Selected Mutations (e.g. Gold, Astronaut, Diamond, Demon, etc.)
+        local mutStr = tostring(unitMutation or ""):lower()
+        if mutStr ~= "" and mutStr ~= "nil" and mutStr ~= "none" then
+            if Config.SelectedBuyMutations and type(Config.SelectedBuyMutations) == "table" then
+                for mName, enabled in pairs(Config.SelectedBuyMutations) do
+                    if enabled and (mutStr:find(mName:lower()) or (mName:lower() == "astronaut" and mutStr:find("cosmic"))) then
+                        mPass = true
+                        break
+                    end
+                end
+            end
+        end
+
+        -- 3. Combine Logic: Buy if matches any selected Rarity OR matches any selected Mutation
+        local anyRaritySelected = false
+        if Config.SelectedBuyRarities then
+            for _, v in pairs(Config.SelectedBuyRarities) do if v then anyRaritySelected = true break end end
+        end
+        local anyMutationSelected = false
+        if Config.SelectedBuyMutations then
+            for _, v in pairs(Config.SelectedBuyMutations) do if v then anyMutationSelected = true break end end
+        end
+
+        if anyRaritySelected and anyMutationSelected then
             return rPass or mPass
+        elseif anyRaritySelected then
+            return rPass
+        elseif anyMutationSelected then
+            return mPass
+        else
+            return true
         end
     end
 
@@ -2932,53 +3053,60 @@ GachaTab:CreateSlider({
 
 GachaTab:CreateHeader("AUTO BUY & FILTER CRITERIA", 3)
 
-GachaTab:CreateDropdown({
-    Name = "Auto Buy - Rarity Filter",
-    Description = "Filter by Character Rarity from Common up to God / Limited",
+GachaTab:CreateMultiDropdown({
+    Name = "Auto Buy - Rarity Filter (Multi-Select)",
+    Description = "Select multiple specific Rarities to automatically buy",
     Options = {
-        "Common & Above (Buy All)",
-        "Rare & Above",
-        "Epic & Above",
-        "Legendary & Above",
-        "Mythic & Above",
-        "Secret & Above",
-        "God & Above",
-        "Limited Only",
-        "Specific: Common Only",
-        "Specific: Rare Only",
-        "Specific: Epic Only",
-        "Specific: Legendary Only",
-        "Specific: Mythic Only",
-        "Specific: Secret Only",
-        "Specific: God Only",
-        "Disabled (Ignore Rarity)"
+        "Common",
+        "Rare",
+        "Epic",
+        "Legendary",
+        "Mythic",
+        "Secret",
+        "God",
+        "Limited",
+        "Godly",
+        "Godlyx",
+        "Divine",
+        "Immortal",
+        "OP",
+        "OG",
+        "INVASION"
     },
-    Default = "Common & Above (Buy All)",
-    Callback = function(choice)
-        Config.AutoBuyRarityMode = choice
+    Default = {
+        ["Common"]    = true,
+        ["Rare"]      = true,
+        ["Epic"]      = true,
+        ["Legendary"] = true,
+        ["Mythic"]    = true,
+        ["Secret"]    = true,
+        ["God"]       = true,
+        ["Limited"]   = true
+    },
+    Callback = function(selectedMap)
+        Config.SelectedBuyRarities = selectedMap
     end
 })
 
-GachaTab:CreateDropdown({
-    Name = "Auto Buy - Mutation Filter",
-    Description = "Filter by special Mutations (Gold, Astronaut, Diamond, etc.)",
+GachaTab:CreateMultiDropdown({
+    Name = "Auto Buy - Mutation Filter (Multi-Select)",
+    Description = "Select multiple specific Mutations to automatically buy",
     Options = {
-        "Disabled (Ignore Mutations)",
-        "Any Mutation (Gold, Diamond, Astronaut, etc.)",
-        "Gold Only",
-        "Astronaut Only",
-        "Diamond Only",
-        "Gold + Astronaut",
-        "Gold + Diamond + Astronaut",
-        "Demon Only",
-        "Destroyer Only",
-        "Hollow Only",
-        "Slayer Only",
-        "Cursed Only"
+        "Gold",
+        "Astronaut",
+        "Diamond",
+        "Demon",
+        "Destroyer",
+        "Hollow",
+        "Slayer",
+        "Cursed"
     },
-    Default = "Gold + Astronaut",
-    Callback = function(choice)
-        Config.AutoBuyMutationMode = choice
+    Default = {
+        ["Gold"]      = true,
+        ["Astronaut"] = true
+    },
+    Callback = function(selectedMap)
+        Config.SelectedBuyMutations = selectedMap
     end
 })
 

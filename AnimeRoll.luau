@@ -1,18 +1,7 @@
---[[
-    ╔═══════════════════════════════════════════════════════════╗
-    ║                     🐰 CUPIE HUB                          ║
-    ║           Ultra-Clean Modular UI Framework                ║
-    ║                                                           ║
-    ║  Discord: https://discord.gg/x98xVJ39                    ║
-    ╚═══════════════════════════════════════════════════════════╝
-
-    Name: CUPIEUI
-    Architecture: Modular Object-Oriented Component Engine
-    Default Theme: Midnight (AMOLED) - Eye-Comfort Tuned
-    Language: 100% English (AutoLocalize Disabled)
-    Features: Mobile/Tablet Responsive, Live FPS/Ping Stats, Component Descriptions,
-              Badges, Direct Slider Typing, Floating Top Badge, and Clean Unload.
---]]
+-- =========================================================
+--  CUPIE HUB - Roll Anime To Fight
+--  Ultra-Clean Modular UI Framework
+-- =========================================================
 
 local Cupie = {}
 Cupie.__index = Cupie
@@ -227,28 +216,22 @@ end
 --// ══════════════════════════════════════════════════════════
 --// INITIALIZE SCREEN GUI & CLEANUP
 --// ══════════════════════════════════════════════════════════
-local function getSafeParentGui()
-    if gethui then
-        local ok, h = pcall(gethui)
-        if ok and h then return h end
-    end
-    if cloneref then
-        local ok, cg = pcall(function() return cloneref(CoreGui) end)
-        if ok and cg then
-            local canParent = pcall(function()
-                local test = Instance.new("Folder")
-                test.Parent = cg
-                test:Destroy()
-            end)
-            if canParent then return cg end
-        end
-    end
-    local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
-    if pg then return pg end
-    return CoreGui
+local parentGui
+if gethui then
+    local ok, h = pcall(gethui)
+    if ok and h then parentGui = h end
 end
-
-local parentGui = getSafeParentGui()
+if not parentGui and cloneref then
+    local ok, cg = pcall(function() return cloneref(CoreGui) end)
+    if ok and cg then parentGui = cg end
+end
+if not parentGui then
+    local ok, pg = pcall(function()
+        return LocalPlayer and (LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 3))
+    end)
+    if ok and pg then parentGui = pg end
+end
+if not parentGui then parentGui = CoreGui end
 
 pcall(function()
     for _, g in ipairs(parentGui:GetChildren()) do
@@ -346,8 +329,8 @@ end
 --// ══════════════════════════════════════════════════════════
 function Cupie:CreateWindow(config)
     config = config or {}
-    local windowTitle    = config.Title or "🐰 CUPIE HUB"
-    local windowSubtitle = config.Subtitle or "Template UI • v1.0"
+    local windowTitle    = config.Title or "CUPIE HUB"
+    local windowSubtitle = config.Subtitle or "Template UI - v1.0"
     local defaultKeybind = config.Keybind or Enum.KeyCode.RightControl
 
     local Window = {
@@ -1549,12 +1532,8 @@ function Cupie:CreateWindow(config)
     end
 
     -- Intro Animation
-    main.Size = UDim2.fromOffset(initW, 0)
-    main.BackgroundTransparency = 1
-    TweenService:Create(main, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-        Size = UDim2.fromOffset(initW, initH),
-        BackgroundTransparency = 0,
-    }):Play()
+    main.Size = UDim2.fromOffset(initW, initH)
+    main.BackgroundTransparency = 0
 
     return Window
 end
@@ -1979,8 +1958,8 @@ end))
 -- CREATE WINDOW
 -- ══════════════════════════════════════════════════════════
 local Window = Cupie:CreateWindow({
-    Title    = "🐰 CUPIE HUB",
-    Subtitle = "Roll Anime To Fight • v1.0",
+    Title    = "CUPIE HUB",
+    Subtitle = "Roll Anime To Fight - v1.0",
     Keybind  = Enum.KeyCode.RightControl
 })
 
@@ -1993,7 +1972,7 @@ DashTab:CreateHeader("GOLD & TREASURY", 1)
 
 -- Highlighted Gold Balance Card
 local goldPara = DashTab:CreateParagraph({
-    Title = "💰 GOLD BALANCE",
+    Title = "GOLD BALANCE",
     Content = "Scanning Gold balance...",
     LayoutOrder = 2
 })
@@ -2174,7 +2153,7 @@ local function updateDashboardStats(startTime)
     local formattedGold = formatNumberWithCommas(goldStr)
     
     -- 1. Prominent Gold Display Card
-    goldPara:SetTitle("🪙  " .. formattedGold .. " GOLD")
+    goldPara:SetTitle(" " .. formattedGold .. " GOLD")
     goldPara:SetContent("Current Available Balance: " .. formattedGold .. " Gold Coins")
     
     -- 2. Other Currencies Card
@@ -2217,7 +2196,7 @@ task.spawn(function()
 end)
 
 -- ══════════════════════════════════════════════════════════
--- TAB 2: 🎰 GACHA & SUMMON ENGINE (ระบบสุ่ม & ซื้อ/ขาย/ล็อคตามระดับ)
+-- TAB 2: GACHA & SUMMON ENGINE (ระบบสุ่ม & ซื้อ/ขาย/ล็อคตามระดับ)
 -- ══════════════════════════════════════════════════════════
 local GachaTab = Window:CreateTab("Gacha", 2)
 GachaTab:CreateToggle({
@@ -2671,7 +2650,7 @@ UpgradeTab:CreateToggle({
 })
 
 -- ══════════════════════════════════════════════════════════
--- TAB 4: ⚔️ COMBAT & DUNGEONS
+-- TAB 4: COMBAT & DUNGEONS
 -- ══════════════════════════════════════════════════════════
 local CombatTab = Window:CreateTab("Combat", 4)
 CombatTab:CreateHeader("Combat Automation & Battle Loop", 1)
@@ -2963,4 +2942,4 @@ MiscTab:CreateButton({
 -- Switch to Stats Tab by Default
 Window:SwitchTab("Stats")
 
-Cupie:Notify("🐰 CUPIE HUB", "Loaded Anime Roll Hub v1.0 Successfully!", 3.5)
+Cupie:Notify("CUPIE HUB", "Loaded Anime Roll Hub v1.0 Successfully!", 3.5)

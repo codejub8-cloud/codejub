@@ -1622,7 +1622,7 @@ local InGameRarities = {
 local Config = {
     -- Gacha & Auto Roll
     AutoRoll            = false,
-    RollDelay           = 2.20,
+    RollDelay           = 2.50,
     
     -- Smart Auto Buy by Rarity
     AutoBuyByRarity     = false,
@@ -2100,20 +2100,17 @@ GachaTab:CreateToggle({
                 local plot = getMyPlot()
                 local prompt, btn = getPlotRollPrompt(plot)
                 
-                -- 1. Trigger ProximityPrompt (Exact Game Mechanism)
+                -- Trigger via primary prompt or single remote fallback (No double-triggering)
                 if prompt then
                     firePrompt(prompt)
-                end
-                
-                -- 2. Trigger Characters.Roll Remote
-                if CharactersRoll then
+                elseif CharactersRoll then
                     pcall(function() CharactersRoll:FireServer() end)
                 end
 
-                -- 3. If Smart Auto Buy is enabled, execute instant buy from stand
+                -- If Smart Auto Buy is enabled, check stand units after roll resolves
                 if Config.AutoBuyByRarity then
                     task.defer(function()
-                        task.wait(0.1)
+                        task.wait(0.35)
                         executeSmartAutoBuy()
                     end)
                 end
@@ -2129,7 +2126,7 @@ GachaTab:CreateSlider({
     Description = "Interval between each roll attempt (seconds, min 2.0s)",
     Min = 2.00,
     Max = 10.00,
-    Default = 2.20,
+    Default = 2.50,
     Step = 0.05,
     Decimals = 2,
     Suffix = "s",
@@ -2140,11 +2137,14 @@ GachaTab:CreateSlider({
             Cupie:StartLoop("AutoRollLoop", Config.RollDelay, function()
                 local plot = getMyPlot()
                 local prompt, btn = getPlotRollPrompt(plot)
-                if prompt then firePrompt(prompt) end
-                if CharactersRoll then pcall(function() CharactersRoll:FireServer() end) end
+                if prompt then
+                    firePrompt(prompt)
+                elseif CharactersRoll then
+                    pcall(function() CharactersRoll:FireServer() end)
+                end
                 if Config.AutoBuyByRarity then
                     task.defer(function()
-                        task.wait(0.1)
+                        task.wait(0.35)
                         executeSmartAutoBuy()
                     end)
                 end

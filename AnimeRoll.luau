@@ -1924,18 +1924,128 @@ local function executeAutoSell()
 end
 
 
+
+-- ══════════════════════════════════════════════════════════
+-- ADVANCED SMART AUTO BUY (RARITY + MUTATIONS MULTI-FILTER)
+-- ══════════════════════════════════════════════════════════
+
 local function executeSmartAutoBuy()
     if not CharactersBuy then return end
-    local minRank = getMinRankFromRule(Config.BuyRuleRarity)
-    local tiers = (Config.BuyRuleTier == "All Tiers") and {1, 2, 3, 4} or {tonumber(Config.BuyRuleTier:match("%d+")) or 1}
+    local plot = getMyPlot()
     
+    local function checkMatches(unitName, unitRarity, unitMutation)
+        local rRank = RarityOrder[unitRarity] or 1
+        local mutStr = tostring(unitMutation or ""):lower()
+
+        -- 1. Check Rarity Filter
+        local rPass = false
+        local rMode = Config.AutoBuyRarityMode or "Rare & Above"
+        if rMode == "Disabled (Ignore Rarity)" then
+            rPass = false
+        elseif rMode == "Common & Above (Buy All)" or rMode == "Common & Above" then
+            rPass = rRank >= 1
+        elseif rMode == "Rare & Above" then
+            rPass = rRank >= 2
+        elseif rMode == "Epic & Above" then
+            rPass = rRank >= 3
+        elseif rMode == "Legendary & Above" then
+            rPass = rRank >= 4
+        elseif rMode == "Mythic & Above" then
+            rPass = rRank >= 5
+        elseif rMode == "Secret & Above" then
+            rPass = rRank >= 6
+        elseif rMode == "God & Above" then
+            rPass = rRank >= 7
+        elseif rMode == "Limited Only" then
+            rPass = (unitRarity == "Limited")
+        elseif rMode:find("Specific") then
+            local target = rMode:match("Specific%s*:%s*(%w+)")
+            if target and unitRarity and unitRarity:lower() == target:lower() then
+                rPass = true
+            end
+        end
+
+        -- 2. Check Mutation Filter (Gold, Diamond, Astronaut, Demon, etc.)
+        local mPass = false
+        local mMode = Config.AutoBuyMutationMode or "Disabled (Ignore Mutations)"
+        if mMode == "Disabled (Ignore Mutations)" then
+            mPass = false
+        elseif mMode == "Any Mutation (Gold, Diamond, Astronaut, etc.)" or mMode == "Any Mutation" then
+            mPass = (mutStr ~= "" and mutStr ~= "nil" and mutStr ~= "none")
+        elseif mMode == "Gold Only" then
+            mPass = mutStr:find("gold") ~= nil
+        elseif mMode == "Diamond Only" then
+            mPass = mutStr:find("diamond") ~= nil
+        elseif mMode == "Astronaut Only" then
+            mPass = (mutStr:find("astronaut") ~= nil or mutStr:find("cosmic") ~= nil)
+        elseif mMode == "Gold + Astronaut" then
+            mPass = (mutStr:find("gold") ~= nil or mutStr:find("astronaut") ~= nil or mutStr:find("cosmic") ~= nil)
+        elseif mMode == "Gold + Diamond + Astronaut" then
+            mPass = (mutStr:find("gold") ~= nil or mutStr:find("diamond") ~= nil or mutStr:find("astronaut") ~= nil or mutStr:find("cosmic") ~= nil)
+        elseif mMode == "Cursed Only" then
+            mPass = mutStr:find("cursed") ~= nil
+        elseif mMode == "Slayer Only" then
+            mPass = mutStr:find("slayer") ~= nil
+        elseif mMode == "Hollow Only" then
+            mPass = mutStr:find("hollow") ~= nil
+        elseif mMode == "Destroyer Only" then
+            mPass = mutStr:find("destroyer") ~= nil
+        elseif mMode == "Demon Only" then
+            mPass = mutStr:find("demon") ~= nil
+        end
+
+        -- 3. Evaluate Match Logic (Either, Both, or Mutation First)
+        local logic = Config.AutoBuyLogic or "Match Either (Rarity OR Mutation)"
+        if logic == "Match Both (Rarity AND Mutation)" then
+            return rPass and mPass
+        elseif logic == "Mutation First (Always Buy Mutation)" then
+            if mPass then return true end
+            return rPass
+        else -- Default: Match Either (Rarity OR Mutation)
+            if rMode == "Disabled (Ignore Rarity)" then return mPass end
+            if mMode == "Disabled (Ignore Mutations)" then return rPass end
+            return rPass or mPass
+        end
+    end
+
+    local boughtAnyPrompt = false
+
+    -- 1. Inspect Physical Shop Stands on Plot
+    if plot then
+        for _, obj in ipairs(plot:GetDescendants()) do
+            if obj:IsA("ProximityPrompt") and (obj.Name:find("Buy") or obj.ActionText:lower():find("buy") or (obj.Parent and obj.Parent.Name:find("HumanoidRootPart"))) then
+                local model = obj:FindFirstAncestorWhichIsA("Model")
+                if model and model ~= LocalPlayer.Character then
+                    local uName = model.Name
+                    local cleanName = uName:lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
+                    
+                    local attrR = model:GetAttribute("Rarity") or model:GetAttribute("Tier")
+                    local rStr = attrR or (CharacterRarities and CharacterRarities[cleanName]) or (CachedModuleRarities and CachedModuleRarities[cleanName]) or "Common"
+                    
+                    local attrM = model:GetAttribute("Mutation") or model:GetAttribute("Mutations") or model:GetAttribute("Variant")
+                    local mutChild = model:FindFirstChild("Mutation") or model:FindFirstChild("Gold") or model:FindFirstChild("Diamond") or model:FindFirstChild("Astronaut")
+                    local mStr = (attrM and tostring(attrM)) or (mutChild and mutChild.Name) or (model.Name:lower():find("gold") and "Gold") or (model.Name:lower():find("astronaut") and "Astronaut") or nil
+                    
+                    if checkMatches(uName, rStr, mStr) then
+                        boughtAnyPrompt = true
+                        firePrompt(obj)
+                        task.wait(0.04)
+                    end
+                end
+            end
+        end
+    end
+
+    -- 2. Direct Buy Remote Fallback
+    local tiers = (Config.BuyTargetTier == "All Tiers") and {1, 2, 3, 4} or {tonumber(tostring(Config.BuyTargetTier or "1"):match("%d+")) or 1}
     for _, tier in ipairs(tiers) do
         for slot = 1, 3 do
             CharactersBuy:FireServer(tier, slot)
-            task.wait(0.06)
+            task.wait(0.04)
         end
     end
 end
+
 
 -- Auto Lock by Selected Minimum Rarity (Verified: Flex.UpdateCharacterLock)
 local function executeAutoLockUnits()
@@ -2701,49 +2811,91 @@ GachaTab:CreateSlider({
     end
 })
 
+GachaTab:CreateHeader("AUTO BUY & FILTER CRITERIA", 3)
+
 GachaTab:CreateDropdown({
-    Name = "Buy Minimum Rarity",
-    Description = "Only automatically buys characters that meet or exceed this rarity",
+    Name = "Auto Buy - Rarity Filter",
+    Description = "Filter by Character Rarity from Common up to God / Limited",
     Options = {
+        "Common & Above (Buy All)",
+        "Rare & Above",
+        "Epic & Above",
         "Legendary & Above",
         "Mythic & Above",
-        "God & Above",
-        "Godly & Above",
-        "Godlyx & Above",
         "Secret & Above",
-        "Divine & Above",
-        "Immortal & Above",
-        "OP & Above",
-        "OG & Above",
-        "INVASION & Above",
+        "God & Above",
         "Limited Only",
-        "Common & Above (Buy All)"
+        "Specific: Common Only",
+        "Specific: Rare Only",
+        "Specific: Epic Only",
+        "Specific: Legendary Only",
+        "Specific: Mythic Only",
+        "Specific: Secret Only",
+        "Specific: God Only",
+        "Disabled (Ignore Rarity)"
     },
-    Default = "Mythic & Above",
-    Callback = function(rule)
-        Config.BuyRuleRarity = rule
+    Default = "Rare & Above",
+    Callback = function(choice)
+        Config.AutoBuyRarityMode = choice
     end
 })
 
 GachaTab:CreateDropdown({
-    Name = "Buy Target Tier",
-    Description = "Select which Tier shop to apply the auto buy rule",
+    Name = "Auto Buy - Mutation Filter",
+    Description = "Filter by special Mutations (Gold, Astronaut, Diamond, etc.)",
+    Options = {
+        "Disabled (Ignore Mutations)",
+        "Any Mutation (Gold, Diamond, Astronaut, etc.)",
+        "Gold Only",
+        "Astronaut Only",
+        "Diamond Only",
+        "Gold + Astronaut",
+        "Gold + Diamond + Astronaut",
+        "Demon Only",
+        "Destroyer Only",
+        "Hollow Only",
+        "Slayer Only",
+        "Cursed Only"
+    },
+    Default = "Gold + Astronaut",
+    Callback = function(choice)
+        Config.AutoBuyMutationMode = choice
+    end
+})
+
+GachaTab:CreateDropdown({
+    Name = "Auto Buy - Match Logic",
+    Description = "Determine how Rarity and Mutation filters are combined",
+    Options = {
+        "Match Either (Rarity OR Mutation)",
+        "Match Both (Rarity AND Mutation)",
+        "Mutation First (Always Buy Mutation)"
+    },
+    Default = "Match Either (Rarity OR Mutation)",
+    Callback = function(choice)
+        Config.AutoBuyLogic = choice
+    end
+})
+
+GachaTab:CreateDropdown({
+    Name = "Auto Buy - Shop Tier",
+    Description = "Select which Tier stand shop to buy from",
     Options = {"All Tiers", "Tier 1", "Tier 2", "Tier 3", "Tier 4"},
     Default = "All Tiers",
-    Callback = function(tierChoice)
-        Config.BuyRuleTier = tierChoice
+    Callback = function(choice)
+        Config.BuyTargetTier = choice
     end
 })
 
 GachaTab:CreateToggle({
-    Name = "Auto Buy Target Rarity Characters",
-    Description = "Continuously buys characters matching your selected rarity criteria",
+    Name = "Enable Smart Auto Buy",
+    Description = "Continuously buys characters matching your Rarity & Mutation criteria",
     Badge = "BUY",
     Default = false,
     Callback = function(state)
         Config.AutoBuyByRarity = state
         if state then
-            Cupie:StartLoop("AutoBuyRarityLoop", 0.5, function()
+            Cupie:StartLoop("AutoBuyRarityLoop", 0.4, function()
                 executeSmartAutoBuy()
             end)
         else

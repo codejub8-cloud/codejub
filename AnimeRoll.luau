@@ -993,7 +993,7 @@ function Cupie:CreateWindow(config)
             return f
         end
 
-        function Tab:CreateSlider(opts)
+                function Tab:CreateSlider(opts)
             local title    = opts.Name or "Slider"
             local min      = opts.Min or 0
             local max      = opts.Max or 100
@@ -1001,15 +1001,20 @@ function Cupie:CreateWindow(config)
             local suffix   = opts.Suffix or ""
             local callback = opts.Callback
             local order    = opts.LayoutOrder or 0
+            local step     = opts.Step
 
             -- Auto-detect decimal precision (e.g. 0.05 -> 2 decimals, 16 -> 0 decimals)
             local precision = opts.Decimals
             if precision == nil then
-                if min ~= math.floor(min) or max ~= math.floor(max) or defVal ~= math.floor(defVal) then
+                if min ~= math.floor(min) or max ~= math.floor(max) or defVal ~= math.floor(defVal) or (step and step ~= math.floor(step)) then
                     precision = 2
                 else
                     precision = 0
                 end
+            end
+
+            if not step then
+                step = (precision > 0) and (1 / (10 ^ precision)) or 1
             end
 
             local function formatVal(v)
@@ -1075,7 +1080,7 @@ function Cupie:CreateWindow(config)
             Cupie:RegisterTheme(bar, "BackgroundColor3", "sliderBg")
 
             local fill = Instance.new("Frame")
-            local initRel = math.clamp((defVal - min) / (max - min), 0, 1)
+            local initRel = (max > min) and math.clamp((defVal - min) / (max - min), 0, 1) or 0
             fill.Size = UDim2.new(initRel, 0, 1, 0)
             fill.BackgroundColor3 = Cupie.C.accent
             fill.BorderSizePixel = 0
@@ -1083,46 +1088,58 @@ function Cupie:CreateWindow(config)
             Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
             Cupie:RegisterTheme(fill, "BackgroundColor3", "accent")
 
+            -- Large Touch/Mouse Hitbox
             local sbtn = Instance.new("TextButton")
             sbtn.AutoLocalize = false
             sbtn.Text = ""
-            sbtn.Size = UDim2.new(1, 0, 1, 0)
+            sbtn.Size = UDim2.new(1, 0, 0, 24)
+            sbtn.Position = UDim2.new(0, 0, 0.5, -12)
             sbtn.BackgroundTransparency = 1
             sbtn.Parent = bar
 
             local sliding = false
 
             local function update(x)
-                local rel = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+                local barAbsPos = bar.AbsolutePosition.X
+                local barAbsSize = bar.AbsoluteSize.X
+                if barAbsSize <= 0 then barAbsSize = 1 end
+                local rel = math.clamp((x - barAbsPos) / barAbsSize, 0, 1)
                 local rawVal = min + (max - min) * rel
-                local v
+                
+                -- Precise stepping calculation
+                local v = math.floor((rawVal - min) / step + 0.5) * step + min
+                v = math.clamp(v, min, max)
                 if precision > 0 then
                     local mult = 10 ^ precision
-                    v = math.floor(rawVal * mult + 0.5) / mult
+                    v = math.floor(v * mult + 0.5) / mult
                 else
-                    v = math.floor(rawVal + 0.5)
+                    v = math.floor(v + 0.5)
                 end
-                fill.Size = UDim2.new(rel, 0, 1, 0)
+
+                local visualRel = (max > min) and math.clamp((v - min) / (max - min), 0, 1) or 0
+                fill.Size = UDim2.new(visualRel, 0, 1, 0)
                 valBox.Text = formatVal(v) .. suffix
                 if callback then callback(v) end
             end
 
-            -- Manual type-in support (handles decimals like 0.12)
+            -- Manual type-in support (handles decimals like 2.05)
             valBox.FocusLost:Connect(function()
                 local cleaned = valBox.Text:gsub("[^%d%.%-]", "")
                 local num = tonumber(cleaned)
                 if num then
                     num = math.clamp(num, min, max)
+                    local v = math.floor((num - min) / step + 0.5) * step + min
+                    v = math.clamp(v, min, max)
                     if precision > 0 then
                         local mult = 10 ^ precision
-                        num = math.floor(num * mult + 0.5) / mult
+                        v = math.floor(v * mult + 0.5) / mult
                     else
-                        num = math.floor(num + 0.5)
+                        v = math.floor(v + 0.5)
                     end
-                    local rel = math.clamp((num - min) / (max - min), 0, 1)
-                    fill.Size = UDim2.new(rel, 0, 1, 0)
-                    valBox.Text = formatVal(num) .. suffix
-                    if callback then callback(num) end
+                    local visualRel = (max > min) and math.clamp((v - min) / (max - min), 0, 1) or 0
+                    fill.Size = UDim2.new(visualRel, 0, 1, 0)
+                    valBox.Text = formatVal(v) .. suffix
+                    if callback then callback(v) end
                 else
                     valBox.Text = formatVal(defVal) .. suffix
                 end
@@ -1484,8 +1501,6 @@ end
 
 --// ══════════════════════════════════════════════════════════
 
-
---// ══════════════════════════════════════════════════════════
 --// GAME AUTOMATION & REMOTE ENGINE (ROLL ANIME TO FIGHT)
 --// Meticulously fine-tuned from Live Spy Logs & Full Dumps
 --// ══════════════════════════════════════════════════════════
@@ -2001,6 +2016,7 @@ GachaTab:CreateSlider({
     Min = 2.00,
     Max = 10.00,
     Default = 2.00,
+    Step = 0.05,
     Decimals = 2,
     Suffix = "s",
     Callback = function(val)

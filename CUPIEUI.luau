@@ -1419,7 +1419,7 @@ function Cupie:CreateWindow(config)
             return f
         end
 
-        function Tab:CreateParagraph(opts)
+                function Tab:CreateParagraph(opts)
             local title = opts.Title or "Info"
             local body  = opts.Content or ""
             local order = opts.LayoutOrder or 0
@@ -1471,7 +1471,36 @@ function Cupie:CreateWindow(config)
             b.TextXAlignment = Enum.TextXAlignment.Left
             b.TextWrapped = true
             Cupie:RegisterTheme(b, "TextColor3", "dim")
-            return f
+
+            local ParagraphObj = {
+                Frame = f,
+                TitleLabel = h,
+                BodyLabel = b
+            }
+            function ParagraphObj:SetTitle(newTitle)
+                h.Text = tostring(newTitle)
+            end
+            function ParagraphObj:SetContent(newContent)
+                b.Text = tostring(newContent)
+            end
+            function ParagraphObj:Set(newTitle, newContent)
+                if newTitle then h.Text = tostring(newTitle) end
+                if newContent then b.Text = tostring(newContent) end
+            end
+
+            setmetatable(ParagraphObj, {
+                __index = f,
+                __newindex = function(t, k, v)
+                    if k == "Title" then
+                        h.Text = tostring(v)
+                    elseif k == "Content" or k == "Text" or k == "Body" then
+                        b.Text = tostring(v)
+                    else
+                        rawset(t, k, v)
+                    end
+                end
+            })
+            return ParagraphObj
         end
 
         function Tab:CreateDivider(layoutOrder)

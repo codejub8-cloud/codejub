@@ -1419,7 +1419,7 @@ function Cupie:CreateWindow(config)
             return f
         end
 
-        function Tab:CreateParagraph(opts)
+                function Tab:CreateParagraph(opts)
             local title = opts.Title or "Info"
             local body  = opts.Content or ""
             local order = opts.LayoutOrder or 0
@@ -1471,7 +1471,36 @@ function Cupie:CreateWindow(config)
             b.TextXAlignment = Enum.TextXAlignment.Left
             b.TextWrapped = true
             Cupie:RegisterTheme(b, "TextColor3", "dim")
-            return f
+
+            local ParagraphObj = {
+                Frame = f,
+                TitleLabel = h,
+                BodyLabel = b
+            }
+            function ParagraphObj:SetTitle(newTitle)
+                h.Text = tostring(newTitle)
+            end
+            function ParagraphObj:SetContent(newContent)
+                b.Text = tostring(newContent)
+            end
+            function ParagraphObj:Set(newTitle, newContent)
+                if newTitle then h.Text = tostring(newTitle) end
+                if newContent then b.Text = tostring(newContent) end
+            end
+
+            setmetatable(ParagraphObj, {
+                __index = f,
+                __newindex = function(t, k, v)
+                    if k == "Title" then
+                        h.Text = tostring(v)
+                    elseif k == "Content" or k == "Text" or k == "Body" then
+                        b.Text = tostring(v)
+                    else
+                        rawset(t, k, v)
+                    end
+                end
+            })
+            return ParagraphObj
         end
 
         function Tab:CreateDivider(layoutOrder)
@@ -1894,92 +1923,133 @@ local Window = Cupie:CreateWindow({
 })
 
 -- ══════════════════════════════════════════════════════════
--- TAB 1: 📊 DASHBOARD & STATS (หน้าแสดงข้อมูลไอดี & สถานะระบบ - ไม่มีปุ่ม)
+-- TAB 1: DASHBOARD & STATS (NO EMOJIS, CLEAN TELEMETRY)
 -- ══════════════════════════════════════════════════════════
 local DashTab = Window:CreateTab("Stats", 1)
 DashTab:CreateHeader("Player Account & Wallet", 1)
 
 local walletPara = DashTab:CreateParagraph({
-    Title = "💰 Live Currencies",
-    Content = "Loading wallet & account stats...",
+    Title = "Live Currencies",
+    Content = "Scanning wallet and currencies...",
     LayoutOrder = 2
 })
 
 DashTab:CreateHeader("Plot & Deployed Team", 3)
 
 local plotPara = DashTab:CreateParagraph({
-    Title = "📍 Plot & Team Status",
-    Content = "Scanning plot & equipped team...",
+    Title = "Plot Status",
+    Content = "Scanning assigned plot...",
     LayoutOrder = 4
 })
 
 local teamPara = DashTab:CreateParagraph({
-    Title = "👥 Equipped Characters & Damage",
-    Content = "Scanning active units in battle...",
+    Title = "Equipped Characters",
+    Content = "Scanning deployed units...",
     LayoutOrder = 5
 })
 
-DashTab:CreateHeader("15 In-Game Rarity Hierarchy", 6)
+DashTab:CreateHeader("15 In-Game Rarity Progression", 6)
 
 local raritiesSummary = DashTab:CreateParagraph({
-    Title = "👑 In-Game Rarity Progression",
-    Content = "15. 💖 Limited   14. 👾 INVASION   13. 💎 OG   12. 💥 OP\n" ..
-        "11. 🔥 Immortal   10. 👑 Divine   9. 🔮 Secret   8. 💫 Godlyx\n" ..
-        "7. ⚡ Godly   6. ✨ God   5. 🔴 Mythic   4. 🟡 Legendary\n" ..
-        "3. 🟣 Epic   2. 🟢 Rare   1. ⚪ Common",
+    Title = "Rarity Hierarchy",
+    Content = "15. Limited   14. INVASION   13. OG   12. OP\n" ..
+        "11. Immortal   10. Divine   9. Secret   8. Godlyx\n" ..
+        "7. Godly   6. God   5. Mythic   4. Legendary\n" ..
+        "3. Epic   2. Rare   1. Common",
     LayoutOrder = 7
 })
 
--- Live Stats Updater Loop
-task.spawn(function()
-    local startTime = os.time()
-    while true do
-        task.wait(1.2)
-        pcall(function()
-            local ls = LocalPlayer:FindFirstChild("leaderstats")
-            local goldVal = ls and (ls:FindFirstChild("Gold") or ls:FindFirstChild("Coins") or ls:FindFirstChild("Money"))
-            local gemsVal = ls and (ls:FindFirstChild("Gems") or ls:FindFirstChild("Diamonds"))
-            local winsVal = ls and (ls:FindFirstChild("Wins") or ls:FindFirstChild("Level") or ls:FindFirstChild("Stage"))
-            
-            local goldStr = goldVal and tostring(goldVal.Value) or "In-Game"
-            local gemsStr = gemsVal and tostring(gemsVal.Value) or "In-Game"
-            local winsStr = winsVal and tostring(winsVal.Value) or "0"
-            
-            local elapsed = os.time() - startTime
-            local hrs = math.floor(elapsed / 3600)
-            local mins = math.floor((elapsed % 3600) / 60)
-            local secs = elapsed % 60
-            local timeStr = string.format("%02d:%02d:%02d", hrs, mins, secs)
-            
-            walletPara.Title = "💰 " .. LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")"
-            walletPara.Content = string.format("🪙 Gold: %s   |   💎 Gems: %s\n🏆 Wins / Level: %s   |   ⏱️ Farm Uptime: %s", goldStr, gemsStr, winsStr, timeStr)
-            
-            local plot = getMyPlot()
-            local plotName = plot and plot.Name or "Assigned"
-            local totalPlots = Workspace:FindFirstChild("Plots") and #Workspace.Plots:GetChildren() or 0
-            
-            plotPara.Title = string.format("📍 Assigned: %s (Total Server Plots: %d)", plotName, totalPlots)
-            plotPara.Content = string.format("⚙️ Live Systems: EquipBest [%s] | LevelUp [%s] | Evolve [%s] | AutoFight [%s]", 
-                Config.AutoEquipBest and "ON" or "OFF",
-                Config.AutoLevelUp and "ON" or "OFF",
-                Config.AutoEvolve and "ON" or "OFF",
-                Config.AutoFight and "ON" or "OFF"
-            )
-
-            -- Scan Deployed Characters from Plot
-            local deployedCount = 0
-            local unitNames = {}
-            if plot and plot:FindFirstChild("PlacedCharacters") then
-                for _, ch in ipairs(plot.PlacedCharacters:GetChildren()) do
-                    deployedCount = deployedCount + 1
-                    table.insert(unitNames, ch.Name)
+-- Comprehensive Currency Scanner (Leaderstats, Attributes, Data, PlayerGui)
+local function getPlayerCurrencies()
+    local gold, gems, wins = nil, nil, nil
+    
+    -- 1. Check Leaderstats
+    local ls = LocalPlayer:FindFirstChild("leaderstats")
+    if ls then
+        for _, child in ipairs(ls:GetChildren()) do
+            local n = child.Name:lower()
+            if n:find("gold") or n:find("coin") or n:find("money") then gold = tostring(child.Value)
+            elseif n:find("gem") or n:find("diamond") then gems = tostring(child.Value)
+            elseif n:find("win") or n:find("level") or n:find("stage") then wins = tostring(child.Value)
+            end
+        end
+    end
+    
+    -- 2. Check Player Attributes
+    if not gold or not gems then
+        for k, v in pairs(LocalPlayer:GetAttributes()) do
+            local n = tostring(k):lower()
+            if not gold and (n:find("gold") or n:find("coin")) then gold = tostring(v)
+            elseif not gems and (n:find("gem") or n:find("diamond")) then gems = tostring(v)
+            elseif not wins and (n:find("win") or n:find("level")) then wins = tostring(v)
+            end
+        end
+    end
+    
+    -- 3. Check Data Folder
+    if not gold or not gems then
+        local df = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData")
+        if df then
+            for _, child in ipairs(df:GetChildren()) do
+                local n = child.Name:lower()
+                if not gold and (n:find("gold") or n:find("coin")) then gold = tostring(child.Value)
+                elseif not gems and (n:find("gem") or n:find("diamond")) then gems = tostring(child.Value)
+                elseif not wins and (n:find("win") or n:find("level")) then wins = tostring(child.Value)
                 end
             end
+        end
+    end
+    
+    return gold or "Connected", gems or "Connected", wins or "0"
+end
 
-            teamPara.Title = string.format("👥 Deployed Team (%d Units on Field)", deployedCount)
-            teamPara.Content = (deployedCount > 0) 
-                and ("Active Units: " .. table.concat(unitNames, ", "))
-                or "No units deployed currently. (Turn on Auto Equip Best in Upgrades)"
+-- Live Stats Updater Loop (Runs immediately + every 1s)
+local function updateDashboardStats(startTime)
+    local goldStr, gemsStr, winsStr = getPlayerCurrencies()
+    local elapsed = os.time() - startTime
+    local hrs = math.floor(elapsed / 3600)
+    local mins = math.floor((elapsed % 3600) / 60)
+    local secs = elapsed % 60
+    local timeStr = string.format("%02d:%02d:%02d", hrs, mins, secs)
+    
+    walletPara:SetTitle(LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")")
+    walletPara:SetContent(string.format("Gold: %s   |   Gems: %s\nWins / Level: %s   |   Farm Uptime: %s", goldStr, gemsStr, winsStr, timeStr))
+    
+    local plot = getMyPlot()
+    local plotName = plot and plot.Name or "Assigned"
+    local totalPlots = Workspace:FindFirstChild("Plots") and #Workspace.Plots:GetChildren() or 0
+    
+    plotPara:SetTitle(string.format("Plot: %s (Total Server Plots: %d)", plotName, totalPlots))
+    plotPara:SetContent(string.format("Active Automations: EquipBest [%s] | LevelUp [%s] | Evolve [%s] | AutoFight [%s]", 
+        Config.AutoEquipBest and "ON" or "OFF",
+        Config.AutoLevelUp and "ON" or "OFF",
+        Config.AutoEvolve and "ON" or "OFF",
+        Config.AutoFight and "ON" or "OFF"
+    ))
+    
+    local deployedCount = 0
+    local unitNames = {}
+    if plot and plot:FindFirstChild("PlacedCharacters") then
+        for _, ch in ipairs(plot.PlacedCharacters:GetChildren()) do
+            deployedCount = deployedCount + 1
+            table.insert(unitNames, ch.Name)
+        end
+    end
+    
+    teamPara:SetTitle(string.format("Deployed Team (%d Units on Field)", deployedCount))
+    teamPara:SetContent((deployedCount > 0) 
+        and ("Units: " .. table.concat(unitNames, ", "))
+        or "No units deployed currently. (Enable Auto Equip Best in Upgrades tab)"
+    )
+end
+
+task.spawn(function()
+    local startTime = os.time()
+    updateDashboardStats(startTime)
+    while true do
+        task.wait(1.0)
+        pcall(function()
+            updateDashboardStats(startTime)
         end)
     end
 end)

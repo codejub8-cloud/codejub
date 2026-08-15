@@ -1795,23 +1795,63 @@ local function triggerEquipBest()
     end
 end
 
--- Rarity Rank Helpers
+-- ══════════════════════════════════════════════════════════
+-- UNIFIED 15-TIER IN-GAME RARITY INDEX & ORDER
+-- ══════════════════════════════════════════════════════════
+
+local InGameRarities = {
+    [1]  = "Common",
+    [2]  = "Rare",
+    [3]  = "Epic",
+    [4]  = "Legendary",
+    [5]  = "Mythic",
+    [6]  = "Secret",
+    [7]  = "God",
+    [8]  = "Limited",
+    [9]  = "Godly",
+    [10] = "Godlyx",
+    [11] = "Divine",
+    [12] = "Immortal",
+    [13] = "OP",
+    [14] = "OG",
+    [15] = "INVASION"
+}
+
+local RarityOrder = {
+    ["Common"]    = 1,
+    ["Rare"]      = 2,
+    ["Epic"]      = 3,
+    ["Legendary"] = 4,
+    ["Mythic"]    = 5,
+    ["Secret"]    = 6,
+    ["God"]       = 7,
+    ["Limited"]   = 8,
+    ["Godly"]     = 9,
+    ["Godlyx"]    = 10,
+    ["Divine"]    = 11,
+    ["Immortal"]  = 12,
+    ["OP"]        = 13,
+    ["OG"]        = 14,
+    ["INVASION"]  = 15
+}
+
 local function getMinRankFromRule(ruleString)
-    if ruleString == "Common & Above" or ruleString == "All Rarities" then return 1
+    if not ruleString then return 1 end
+    if ruleString == "Common & Above (Buy All)" or ruleString == "Common & Above" or ruleString == "All Rarities" or ruleString == "All Units" then return 1
     elseif ruleString == "Rare & Above" then return 2
     elseif ruleString == "Epic & Above" then return 3
     elseif ruleString == "Legendary & Above" then return 4
     elseif ruleString == "Mythic & Above" then return 5
-    elseif ruleString == "God & Above" then return 6
-    elseif ruleString == "Godly & Above" then return 7
-    elseif ruleString == "Godlyx & Above" then return 8
-    elseif ruleString == "Secret & Above" then return 9
-    elseif ruleString == "Divine & Above" then return 10
-    elseif ruleString == "Immortal & Above" then return 11
-    elseif ruleString == "OP & Above" then return 12
-    elseif ruleString == "OG & Above" then return 13
-    elseif ruleString == "INVASION & Above" then return 14
-    elseif ruleString == "Limited Only" then return 15
+    elseif ruleString == "Secret & Above" then return 6
+    elseif ruleString == "God & Above" then return 7
+    elseif ruleString == "Limited Only" then return 8
+    elseif ruleString == "Godly & Above" then return 9
+    elseif ruleString == "Godlyx & Above" then return 10
+    elseif ruleString == "Divine & Above" then return 11
+    elseif ruleString == "Immortal & Above" then return 12
+    elseif ruleString == "OP & Above" then return 13
+    elseif ruleString == "OG & Above" then return 14
+    elseif ruleString == "INVASION & Above" then return 15
     end
     return 1
 end
@@ -1826,37 +1866,25 @@ local function getMaxSellRank(sellChoice)
     return 1
 end
 
--- Smart Auto Sell: Multi-payload engine for all server implementations
+-- Auto Sell Function using Official 122-Character Database & DataService
 local function executeAutoSell()
     if not CharactersSell then return end
     local maxSellRank = getMaxSellRank(Config.SellThreshold)
     if maxSellRank <= 0 then return end
     
-    local rarityRank = {}
-    for rank, name in pairs(InGameRarities) do
-        rarityRank[name] = rank
+    local function getUnitRarity(unitName, explicitRarity)
+        if explicitRarity and RarityOrder[explicitRarity] then return explicitRarity end
+        local clean = tostring(unitName or ""):lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
+        if not clean or clean == "" then return nil end
+        if CachedModuleRarities and CachedModuleRarities[clean] then return CachedModuleRarities[clean] end
+        if CharacterRarities and CharacterRarities[clean] then return CharacterRarities[clean] end
+        return nil
     end
-    
-    local charRarityMap = {}
-    pcall(function()
-        local cInfoMod = ReplicatedStorage:FindFirstChild("Modules") 
-            and ReplicatedStorage.Modules:FindFirstChild("Characters") 
-            and ReplicatedStorage.Modules.Characters:FindFirstChild("CharactersInfo")
-        if cInfoMod then
-            local info = require(cInfoMod)
-            if info and info.Characters then
-                for cName, cData in pairs(info.Characters) do
-                    if cData and cData.Rarity then
-                        charRarityMap[tostring(cName):lower()] = cData.Rarity
-                    end
-                end
-            end
-        end
-    end)
-    
+
+    -- 1. Scan LocalPlayer Data / Inventory Folder
     local invFolder = nil
     pcall(function()
-        local dataFolder = LocalPlayer:FindFirstChild("Data")
+        local dataFolder = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData")
         if dataFolder then
             invFolder = dataFolder:FindFirstChild("Inventory") or dataFolder:FindFirstChild("Characters")
         end
@@ -1865,54 +1893,27 @@ local function executeAutoSell()
         end
     end)
     
-    -- Mode 1: Individual Item Selling
     if invFolder then
-        local unitsToSell = {}
         for _, item in ipairs(invFolder:GetChildren()) do
-            local rStr = nil
-            pcall(function()
-                rStr = item:GetAttribute("Rarity")
-                if not rStr or type(rStr) ~= "string" then
-                    local rc = item:FindFirstChild("Rarity")
-                    if rc and rc:IsA("ValueBase") then
-                        rStr = tostring(rc.Value)
-                    end
-                end
-            end)
-            if not rStr then
-                rStr = charRarityMap[item.Name:lower()]
-            end
+            local rStr = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
+            local isLocked = item:GetAttribute("Locked") == true
+            local finalRarity = getUnitRarity(item.Name, rStr)
             
-            local isLocked = false
-            pcall(function()
-                isLocked = item:GetAttribute("Locked") == true
-                if not isLocked then
-                    local lockChild = item:FindFirstChild("Locked")
-                    if lockChild and lockChild:IsA("ValueBase") then isLocked = lockChild.Value == true end
-                end
-            end)
-            
-            if rStr and not isLocked then
-                local rank = rarityRank[rStr]
-                if rank and rank <= maxSellRank then
-                    table.insert(unitsToSell, item)
+            if finalRarity and not isLocked then
+                local rank = RarityOrder[finalRarity] or 1
+                if rank <= maxSellRank then
+                    pcall(function() CharactersSell:FireServer(item.Name) end)
+                    pcall(function() CharactersSell:FireServer(item) end)
+                    pcall(function() CharactersSell:FireServer({item.Name}) end)
+                    task.wait(0.04)
                 end
             end
-        end
-        
-        for _, unit in ipairs(unitsToSell) do
-            pcall(function() CharactersSell:FireServer(unit.Name) end)
-            pcall(function() CharactersSell:FireServer(unit) end)
-            pcall(function() CharactersSell:FireServer({unit.Name}) end)
-            task.wait(0.05)
         end
     end
     
-    -- Mode 2: Bulk / Rarity Name / Rank Number Remote Calls
+    -- 2. Bulk Sell Remote Invocations
     pcall(function() CharactersSell:FireServer(maxSellRank) end)
     pcall(function() CharactersSell:FireServer("SellRank", maxSellRank) end)
-    
-    -- Fire for each rarity name up to max rank (Common, Rare, Epic, Legendary)
     for r = 1, maxSellRank do
         local rName = InGameRarities[r]
         if rName then
@@ -1922,7 +1923,7 @@ local function executeAutoSell()
     end
 end
 
--- Smart Auto Buy by Rarity Function
+
 local function executeSmartAutoBuy()
     if not CharactersBuy then return end
     local minRank = getMinRankFromRule(Config.BuyRuleRarity)

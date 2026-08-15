@@ -2202,8 +2202,78 @@ local function getCurrentPlayerGold()
 end
 
 
+
+local function getStandTargetInfo(model)
+    if not model or not model:IsA("Model") then return nil end
+    local uName = model.Name
+    local cleanName = uName:lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
+    
+    local foundRarity = nil
+    local foundMutation = nil
+    local foundPrice = nil
+    local foundCharName = nil
+
+    for _, desc in ipairs(model:GetDescendants()) do
+        if desc:IsA("TextLabel") and desc.Visible then
+            local txt = desc.Text:lower():match("^%s*(.-)%s*$") or ""
+            
+            -- Read Price from Billboard (e.g. "$400", "$1,200", "$350K")
+            local priceMatch = desc.Text:match("%$%s*([%d%,%.%a]+)") or desc.Text:match("([%d%,%.%a]+)%s*[Gg]old")
+            if priceMatch then
+                foundPrice = parseFormattedNumber(priceMatch)
+            end
+
+            -- Read Mutation from Billboard
+            if txt:find("gold") then foundMutation = "Gold"
+            elseif txt:find("diamond") then foundMutation = "Diamond"
+            elseif txt:find("astronaut") or txt:find("cosmic") then foundMutation = "Astronaut"
+            elseif txt:find("demon") then foundMutation = "Demon"
+            elseif txt:find("destroyer") then foundMutation = "Destroyer"
+            elseif txt:find("hollow") then foundMutation = "Hollow"
+            elseif txt:find("slayer") then foundMutation = "Slayer"
+            elseif txt:find("cursed") then foundMutation = "Cursed"
+            end
+            
+            -- Read Rarity from Billboard
+            if InGameRarities then
+                for _, rName in pairs(InGameRarities) do
+                    if txt == rName:lower() or txt:find("^" .. rName:lower() .. "$") or txt:find(rName:lower()) then
+                        foundRarity = rName
+                        break
+                    end
+                end
+            end
+            
+            if CharacterRarities and (CharacterRarities[txt] or CharacterRarities[txt:gsub("[%[%]%(%)%_%-%.%#]", "")]) then
+                foundCharName = txt
+            end
+        end
+    end
+
+    local attrR = model:GetAttribute("Rarity") or model:GetAttribute("Tier")
+    local finalRarity = foundRarity or attrR or (foundCharName and CharacterRarities and CharacterRarities[foundCharName]) or (CharacterRarities and CharacterRarities[cleanName]) or (CachedModuleRarities and CachedModuleRarities[cleanName]) or "Common"
+    
+    local attrM = model:GetAttribute("Mutation") or model:GetAttribute("Mutations") or model:GetAttribute("Variant")
+    local mutChild = model:FindFirstChild("Mutation") or model:FindFirstChild("Gold") or model:FindFirstChild("Diamond") or model:FindFirstChild("Astronaut")
+    local finalMutation = foundMutation or (attrM and tostring(attrM)) or (mutChild and mutChild.Name) or (model.Name:lower():find("gold") and "Gold") or (model.Name:lower():find("astronaut") and "Astronaut") or nil
+
+    local cost = foundPrice or getCharacterCost(cleanName, finalMutation)
+    local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+    return {
+        Model = model,
+        Name = uName,
+        CleanName = cleanName,
+        Rarity = finalRarity,
+        Mutation = finalMutation,
+        Cost = cost,
+        Prompt = prompt
+    }
+end
+
+
 -- ══════════════════════════════════════════════════════════
--- 100% VERIFIED BULLETPROOF SMART AUTO BUY (STAND + BILLBOARD + MULTI-REMOTE)
+-- SYNCHRONIZED SMART AUTO BUY (WITH REAL-TIME GOLD WAITING ENGINE)
 -- ══════════════════════════════════════════════════════════
 
 local function executeSmartAutoBuy()
@@ -2219,7 +2289,7 @@ local function executeSmartAutoBuy()
         local rPass = false
         local mPass = false
 
-        -- 1. Check Multi-Selected Rarities (e.g. Common, Rare, Epic, Legendary, Mythic, Secret, God, Limited)
+        -- 1. Check Multi-Selected Rarities
         if Config.SelectedBuyRarities and type(Config.SelectedBuyRarities) == "table" then
             for rName, enabled in pairs(Config.SelectedBuyRarities) do
                 if enabled and unitRarity and (unitRarity:lower() == rName:lower() or unitRarity:lower():find(rName:lower())) then
@@ -2229,7 +2299,7 @@ local function executeSmartAutoBuy()
             end
         end
 
-        -- 2. Check Multi-Selected Mutations (e.g. Gold, Astronaut, Diamond, Demon, etc.)
+        -- 2. Check Multi-Selected Mutations
         local mutStr = tostring(unitMutation or ""):lower()
         if mutStr ~= "" and mutStr ~= "nil" and mutStr ~= "none" then
             if Config.SelectedBuyMutations and type(Config.SelectedBuyMutations) == "table" then
@@ -2267,10 +2337,8 @@ local function executeSmartAutoBuy()
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local myPlot = getMyPlot()
 
-    -- 1. Scan all character models on the plot and nearby stands
+    -- 1. Scan candidate models
     local candidateModels = {}
-    
-    -- Check myPlot.Characters
     if myPlot then
         local charFolder = myPlot:FindFirstChild("Characters") or myPlot:FindFirstChild("Stands") or myPlot:FindFirstChild("Roll")
         if charFolder then
@@ -2282,7 +2350,6 @@ local function executeSmartAutoBuy()
         end
     end
     
-    -- Check nearby models in Workspace within 45 studs
     if #candidateModels == 0 and root then
         for _, m in ipairs(Workspace:GetChildren()) do
             if m:IsA("Model") and m ~= char and m.Name ~= "Terrain" then
@@ -2310,106 +2377,66 @@ local function executeSmartAutoBuy()
         end
     end
 
-    -- 2. Sort candidate models by X/Z position to accurately map slot 1, 2, 3
     table.sort(candidateModels, function(a, b)
         local pA = a:GetPivot().Position
         local pB = b:GetPivot().Position
         return (pA.X + pA.Z) < (pB.X + pB.Z)
     end)
 
-    -- 3. Evaluate each stand model
+    local matchingTargets = {}
+
     for slotIdx, model in ipairs(candidateModels) do
-        local uName = model.Name
-        local cleanName = uName:lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
-        
-        -- Deep Billboard & TextLabel Inspection (Reads Over-Head GUI like 'Gold', 'Common', 'Zero', '$400')
-        local foundRarity = nil
-        local foundMutation = nil
-        local foundCharName = nil
-
-        for _, desc in ipairs(model:GetDescendants()) do
-            if desc:IsA("TextLabel") and desc.Visible then
-                local txt = desc.Text:lower():match("^%s*(.-)%s*$") or ""
-                
-                -- Check Mutation in Billboard text
-                if txt:find("gold") then foundMutation = "Gold"
-                elseif txt:find("diamond") then foundMutation = "Diamond"
-                elseif txt:find("astronaut") or txt:find("cosmic") then foundMutation = "Astronaut"
-                elseif txt:find("demon") then foundMutation = "Demon"
-                elseif txt:find("destroyer") then foundMutation = "Destroyer"
-                elseif txt:find("hollow") then foundMutation = "Hollow"
-                elseif txt:find("slayer") then foundMutation = "Slayer"
-                elseif txt:find("cursed") then foundMutation = "Cursed"
-                end
-                
-                -- Check Rarity in Billboard text
-                if InGameRarities then
-                    for _, rName in pairs(InGameRarities) do
-                        if txt == rName:lower() or txt:find("^" .. rName:lower() .. "$") or txt:find(rName:lower()) then
-                            foundRarity = rName
-                            break
-                        end
-                    end
-                end
-                
-                -- Check Character Name in Billboard text
-                if CharacterRarities and (CharacterRarities[txt] or CharacterRarities[txt:gsub("[%[%]%(%)%_%-%.%#]", "")]) then
-                    foundCharName = txt
-                end
-            end
+        local info = getStandTargetInfo(model)
+        if info and checkMatches(info.Name, info.Rarity, info.Mutation) then
+            info.SlotIdx = slotIdx
+            table.insert(matchingTargets, info)
         end
+    end
 
-        local attrR = model:GetAttribute("Rarity") or model:GetAttribute("Tier")
-        local finalRarity = foundRarity or attrR or (foundCharName and CharacterRarities and CharacterRarities[foundCharName]) or (CharacterRarities and CharacterRarities[cleanName]) or (CachedModuleRarities and CachedModuleRarities[cleanName]) or "Common"
+    -- Process each matching target: If money is not enough, PAUSE & WAIT until money is ready!
+    for _, target in ipairs(matchingTargets) do
+        local requiredCost = target.Cost or 200
         
-        local attrM = model:GetAttribute("Mutation") or model:GetAttribute("Mutations") or model:GetAttribute("Variant")
-        local mutChild = model:FindFirstChild("Mutation") or model:FindFirstChild("Gold") or model:FindFirstChild("Diamond") or model:FindFirstChild("Astronaut")
-        local finalMutation = foundMutation or (attrM and tostring(attrM)) or (mutChild and mutChild.Name) or (model.Name:lower():find("gold") and "Gold") or (model.Name:lower():find("astronaut") and "Astronaut") or nil
-
-        if checkMatches(uName, finalRarity, finalMutation) then
-            -- 1. Trigger Proximity Prompts on Model
-            for _, prompt in ipairs(model:GetDescendants()) do
-                if prompt:IsA("ProximityPrompt") then
+        -- Loop wait until player has enough Gold (Pauses auto roll so unit is not lost!)
+        while Config.AutoRoll and Config.AutoBuyByRarity and target.Model and target.Model.Parent and getCurrentPlayerGold() < requiredCost do
+            task.wait(0.4)
+        end
+        
+        -- Buy the stand unit
+        if target.Model and target.Model.Parent then
+            if target.Prompt then
+                pcall(function()
+                    target.Prompt.MaxActivationDistance = 999999
+                    target.Prompt.RequiresLineOfSight = false
+                    target.Prompt.HoldDuration = 0
+                end)
+                if fireproximityprompt then
+                    pcall(function() fireproximityprompt(target.Prompt, 1) end)
+                    pcall(function() fireproximityprompt(target.Prompt, 0) end)
+                    pcall(function() fireproximityprompt(target.Prompt) end)
+                end
+                if target.Prompt.InputHoldBegin then
                     pcall(function()
-                        prompt.MaxActivationDistance = 999999
-                        prompt.RequiresLineOfSight = false
-                        prompt.HoldDuration = 0
+                        target.Prompt:InputHoldBegin()
+                        task.wait(0.01)
+                        target.Prompt:InputHoldEnd()
                     end)
-                    if fireproximityprompt then
-                        pcall(function() fireproximityprompt(prompt, 1) end)
-                        pcall(function() fireproximityprompt(prompt, 0) end)
-                        pcall(function() fireproximityprompt(prompt) end)
-                    end
-                    if prompt.InputHoldBegin then
-                        pcall(function()
-                            prompt:InputHoldBegin()
-                            task.wait(0.01)
-                            prompt:InputHoldEnd()
-                        end)
-                    end
                 end
             end
             
-            -- 2. Trigger Buy Remote for this Slot across Tiers 1-4
             if CharactersBuy then
                 for tier = 1, 4 do
-                    pcall(function() CharactersBuy:FireServer(tier, slotIdx) end)
+                    pcall(function() CharactersBuy:FireServer(tier, target.SlotIdx) end)
                     pcall(function() CharactersBuy:FireServer(tier, 1) end)
                     pcall(function() CharactersBuy:FireServer(tier, 2) end)
                     pcall(function() CharactersBuy:FireServer(tier, 3) end)
                 end
             end
+            task.wait(0.08)
         end
     end
 
-    -- 4. Global Fallback Trigger across all slots
-    if CharactersBuy and #candidateModels == 0 then
-        for tier = 1, 4 do
-            for slot = 1, 3 do
-                pcall(function() CharactersBuy:FireServer(tier, slot) end)
-            end
-        end
-    end
+    return #matchingTargets
 end
 
 
@@ -3116,21 +3143,17 @@ GachaTab:CreateToggle({
                 local plot = getMyPlot()
                 local prompt, btn = getPlotRollPrompt(plot)
                 
-                -- Trigger Roll
+                -- 1. Trigger Roll
                 if prompt then
                     firePrompt(prompt)
                 elseif CharactersRoll then
                     pcall(function() CharactersRoll:FireServer() end)
                 end
 
-                -- Instant + Post-Spawn Auto Buy Checks
+                -- 2. Synchronous Auto Buy & Fund-Wait Check (Stops roll from overwriting unbought target units!)
                 if Config.AutoBuyByRarity then
-                    task.defer(function()
-                        task.wait(0.2)
-                        executeSmartAutoBuy()
-                        task.wait(0.3)
-                        executeSmartAutoBuy()
-                    end)
+                    task.wait(0.35)
+                    executeSmartAutoBuy()
                 end
             end)
         else

@@ -1777,22 +1777,47 @@ end
 
 local function firePrompt(prompt)
     if not prompt or not prompt.Enabled then return end
+    pcall(function()
+        prompt.MaxActivationDistance = 999999
+        prompt.RequiresLineOfSight = false
+        prompt.HoldDuration = 0
+    end)
     if fireproximityprompt then
         pcall(function() fireproximityprompt(prompt) end)
+    elseif prompt.InputHoldBegin then
+        pcall(function()
+            prompt:InputHoldBegin()
+            task.wait(0.04)
+            prompt:InputHoldEnd()
+        end)
     end
 end
 
-local function ensureSmoothPadPosition(padPart)
-    if not padPart then return end
+local function getPlotRollPrompt(plot)
+    if not plot then return nil end
+    local rollFolder = plot:FindFirstChild("Roll")
+    if rollFolder then
+        local rollBtn = rollFolder:FindFirstChild("RollButton")
+        if rollBtn then
+            local btn = rollBtn:FindFirstChild("Button") or rollBtn
+            local prompt = btn:FindFirstChild("RollPrompt") or btn:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if prompt then return prompt, btn end
+        end
+        local anyPrompt = rollFolder:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if anyPrompt then return anyPrompt, anyPrompt.Parent end
+    end
+    return nil, nil
+end
+
+local function smoothPositionToRollPad()
+    local plot = getMyPlot()
+    local _, btn = getPlotRollPrompt(plot)
+    if not btn then return end
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    
-    local targetPos = padPart.Position + Vector3.new(0, 3, 0)
-    local dist = (root.Position - targetPos).Magnitude
-    
-    if dist > 3.5 then
-        root.CFrame = CFrame.new(targetPos, targetPos + padPart.CFrame.LookVector)
+    if root and btn:IsA("BasePart") then
+        local targetPos = btn.Position + Vector3.new(0, 3.2, 0)
+        root.CFrame = CFrame.new(targetPos, targetPos + btn.CFrame.LookVector)
         root.AssemblyLinearVelocity = Vector3.zero
         root.AssemblyAngularVelocity = Vector3.zero
     end
@@ -2062,32 +2087,35 @@ GachaTab:CreateHeader("Auto Roll & Summon Engine", 1)
 
 GachaTab:CreateToggle({
     Name = "Auto Roll (Fast Summon)",
-    Description = "Positions on pad and rolls continuously with auto-lock & filters",
+    Description = "Automatically triggers roll proximity prompt and remote without stuttering",
     Badge = "HOT",
     Default = false,
     Callback = function(state)
         Config.AutoRoll = state
         if state then
-            local plot = getMyPlot()
-            if plot and plot:FindFirstChild("Roll") and plot.Roll:FindFirstChild("RollButton") then
-                local btn = plot.Roll.RollButton:FindFirstChild("Button")
-                if btn then ensureSmoothPadPosition(btn) end
-            end
+            -- Position on pad once when starting
+            smoothPositionToRollPad()
             
             Cupie:StartLoop("AutoRollLoop", Config.RollDelay, function()
-                local p = getMyPlot()
-                if p and p:FindFirstChild("Roll") then
-                    local rollBtn = p.Roll:FindFirstChild("RollButton")
-                    if rollBtn and rollBtn:FindFirstChild("Button") then
-                        local btn = rollBtn.Button
-                        ensureSmoothPadPosition(btn)
-                        local prompt = btn:FindFirstChild("RollPrompt") or btn:FindFirstChildWhichIsA("ProximityPrompt", true)
-                        if prompt then firePrompt(prompt) end
-                    end
+                local plot = getMyPlot()
+                local prompt, btn = getPlotRollPrompt(plot)
+                
+                -- 1. Trigger ProximityPrompt (Exact Game Mechanism)
+                if prompt then
+                    firePrompt(prompt)
                 end
                 
+                -- 2. Trigger Characters.Roll Remote
                 if CharactersRoll then
                     pcall(function() CharactersRoll:FireServer() end)
+                end
+
+                -- 3. If Smart Auto Buy is enabled, execute instant buy from stand
+                if Config.AutoBuyByRarity then
+                    task.defer(function()
+                        task.wait(0.1)
+                        executeSmartAutoBuy()
+                    end)
                 end
             end)
         else

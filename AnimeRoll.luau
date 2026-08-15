@@ -2137,23 +2137,73 @@ local function getCharacterCost(cleanName, mutStr)
     return base * mult
 end
 
+
+local function parseFormattedNumber(val)
+    if type(val) == "number" then return val end
+    if not val then return 0 end
+    local str = tostring(val):gsub(",", ""):match("^%s*(.-)%s*$") or "0"
+    local num, suffix = str:match("([%d%.]+)%s*([KkMmBbTtQq]?)")
+    local n = tonumber(num) or 0
+    if suffix then
+        local s = suffix:upper()
+        if s == "K" then n = n * 1e3
+        elseif s == "M" then n = n * 1e6
+        elseif s == "B" then n = n * 1e9
+        elseif s == "T" then n = n * 1e12
+        elseif s == "Q" then n = n * 1e15
+        end
+    end
+    return n
+end
+
 local function getCurrentPlayerGold()
+    -- 1. Direct DataService Profile
+    local dsGold = nil
+    pcall(function()
+        local dataServMod = ReplicatedStorage:FindFirstChild("Data") and ReplicatedStorage.Data:FindFirstChild("DataService")
+        if dataServMod then
+            local ds = require(dataServMod)
+            local client = (type(ds) == "table" and (ds.client or ds.Client or ds)) or ds
+            dsGold = client:get(LocalPlayer, {"Gold"}) or client:get({"Gold"})
+        end
+    end)
+    if dsGold and type(dsGold) == "number" and dsGold > 0 then
+        return dsGold
+    end
+
+    -- 2. LocalPlayer Data Folders
+    local dFolder = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("leaderstats") or LocalPlayer:FindFirstChild("PlayerData")
+    if dFolder then
+        local gVal = dFolder:FindFirstChild("Gold") or dFolder:FindFirstChild("Coins") or dFolder:FindFirstChild("Money")
+        if gVal and gVal:IsA("ValueBase") and tonumber(gVal.Value) then
+            return tonumber(gVal.Value)
+        end
+    end
+
+    -- 3. Screen Currency Parser
     local gStr, _, _ = getPlayerCurrencies()
-    local clean = tostring(gStr or "0"):gsub("[^%d]", "")
-    return tonumber(clean) or 0
+    return parseFormattedNumber(gStr)
 end
 
 
 -- ══════════════════════════════════════════════════════════
--- SMART AUTO BUY (WITH TRUE MULTI-SELECT RARITIES & MUTATIONS)
+-- INSTANT GUARANTEED SMART AUTO BUY (PLOT STAND + DUAL REMOTE TRIGGER)
 -- ══════════════════════════════════════════════════════════
 
 local function executeSmartAutoBuy()
+    if not CharactersBuy then
+        pcall(function()
+            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
+                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
+                and ReplicatedStorage.Remotes.Characters:FindFirstChild("Buy")
+        end)
+    end
+
     local function checkMatches(unitName, unitRarity, unitMutation)
         local rPass = false
         local mPass = false
 
-        -- 1. Check Multi-Selected Rarities (e.g. Common, Rare, Epic, Legendary, Mythic, Secret, God, Limited)
+        -- 1. Check Multi-Selected Rarities
         if Config.SelectedBuyRarities and type(Config.SelectedBuyRarities) == "table" then
             if Config.SelectedBuyRarities[unitRarity] == true then
                 rPass = true
@@ -2167,7 +2217,7 @@ local function executeSmartAutoBuy()
             end
         end
 
-        -- 2. Check Multi-Selected Mutations (e.g. Gold, Astronaut, Diamond, Demon, etc.)
+        -- 2. Check Multi-Selected Mutations
         local mutStr = tostring(unitMutation or ""):lower()
         if mutStr ~= "" and mutStr ~= "nil" and mutStr ~= "none" then
             if Config.SelectedBuyMutations and type(Config.SelectedBuyMutations) == "table" then
@@ -2180,7 +2230,7 @@ local function executeSmartAutoBuy()
             end
         end
 
-        -- 3. Combine Logic: Buy if matches any selected Rarity OR matches any selected Mutation
+        -- 3. Match Logic: Buy if matches any selected Rarity OR matches any selected Mutation
         local anyRaritySelected = false
         if Config.SelectedBuyRarities then
             for _, v in pairs(Config.SelectedBuyRarities) do if v then anyRaritySelected = true break end end
@@ -2202,92 +2252,58 @@ local function executeSmartAutoBuy()
     end
 
     local myPlot = getMyPlot()
-    local searchContainers = {}
-    if myPlot then table.insert(searchContainers, myPlot) end
-    local plotsFolder = Workspace:FindFirstChild("Plots")
-    if plotsFolder then table.insert(searchContainers, plotsFolder) end
+    local charFolder = myPlot and (myPlot:FindFirstChild("Characters") or myPlot:FindFirstChild("Stands"))
+    local standChildren = charFolder and charFolder:GetChildren() or {}
 
-    local matchingStands = {}
-
-    -- Scan matching stand characters
-    for _, container in ipairs(searchContainers) do
-        for _, prompt in ipairs(container:GetDescendants()) do
-            if prompt:IsA("ProximityPrompt") and prompt.Enabled then
-                local pName = prompt.Name:lower()
-                local aText = prompt.ActionText:lower()
-                local oText = prompt.ObjectText:lower()
+    -- 1. If plot stand models exist, inspect each slot directly
+    if #standChildren > 0 then
+        for slotIdx, model in ipairs(standChildren) do
+            if model:IsA("Model") and model ~= LocalPlayer.Character then
+                local uName = model.Name
+                local cleanName = uName:lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
                 
-                if pName:find("buy") or aText:find("buy") or oText:find("buy") or (prompt.Parent and prompt.Parent.Name == "HumanoidRootPart") then
-                    local model = prompt:FindFirstAncestorWhichIsA("Model")
-                    if model and model ~= LocalPlayer.Character and model.Name ~= "Terrain" then
-                        local uName = model.Name
-                        local cleanName = uName:lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
-                        
-                        local attrR = model:GetAttribute("Rarity") or model:GetAttribute("Tier")
-                        local rStr = attrR or (CharacterRarities and CharacterRarities[cleanName]) or (CachedModuleRarities and CachedModuleRarities[cleanName]) or "Common"
-                        
-                        local attrM = model:GetAttribute("Mutation") or model:GetAttribute("Mutations") or model:GetAttribute("Variant")
-                        local mutChild = model:FindFirstChild("Mutation") or model:FindFirstChild("Gold") or model:FindFirstChild("Diamond") or model:FindFirstChild("Astronaut")
-                        local mStr = (attrM and tostring(attrM)) or (mutChild and mutChild.Name) or (model.Name:lower():find("gold") and "Gold") or (model.Name:lower():find("astronaut") and "Astronaut") or nil
-                        
-                        if checkMatches(uName, rStr, mStr) then
-                            local cost = getCharacterCost(cleanName, mStr)
-                            table.insert(matchingStands, {
-                                Prompt = prompt,
-                                Model = model,
-                                Name = uName,
-                                Cost = cost
-                            })
+                local attrR = model:GetAttribute("Rarity") or model:GetAttribute("Tier")
+                local rStr = attrR or (CharacterRarities and CharacterRarities[cleanName]) or (CachedModuleRarities and CachedModuleRarities[cleanName]) or "Common"
+                
+                local attrM = model:GetAttribute("Mutation") or model:GetAttribute("Mutations") or model:GetAttribute("Variant")
+                local mutChild = model:FindFirstChild("Mutation") or model:FindFirstChild("Gold") or model:FindFirstChild("Diamond") or model:FindFirstChild("Astronaut")
+                local mStr = (attrM and tostring(attrM)) or (mutChild and mutChild.Name) or (model.Name:lower():find("gold") and "Gold") or (model.Name:lower():find("astronaut") and "Astronaut") or nil
+                
+                if checkMatches(uName, rStr, mStr) then
+                    local cost = getCharacterCost(cleanName, mStr)
+                    local curGold = getCurrentPlayerGold()
+                    
+                    -- Only wait if gold is strictly greater than 0 and less than cost
+                    if curGold > 0 and curGold < cost then
+                        local waitTimeout = 0
+                        while Config.AutoRoll and Config.AutoBuyByRarity and getCurrentPlayerGold() < cost and waitTimeout < 30 do
+                            task.wait(0.5)
+                            waitTimeout = waitTimeout + 0.5
+                        end
+                    end
+                    
+                    -- Trigger Prompt on Model
+                    local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    if prompt then
+                        firePrompt(prompt)
+                    end
+                    
+                    -- Direct Remote Trigger for this specific slot across active tiers
+                    if CharactersBuy then
+                        for tier = 1, 4 do
+                            pcall(function() CharactersBuy:FireServer(tier, slotIdx) end)
                         end
                     end
                 end
             end
         end
-    end
-
-    -- Process Auto Buy with embedded Gold Check
-    for _, stand in ipairs(matchingStands) do
-        local requiredGold = stand.Cost or 200
-        
-        -- If gold not enough, wait until gold is ready
-        while Config.AutoRoll and Config.AutoBuyByRarity and getCurrentPlayerGold() < requiredGold do
-            task.wait(0.4)
-        end
-        
-        -- Purchase stand
-        if getCurrentPlayerGold() >= requiredGold then
-            pcall(function()
-                stand.Prompt.MaxActivationDistance = 999999
-                stand.Prompt.RequiresLineOfSight = false
-                stand.Prompt.HoldDuration = 0
-            end)
-            if fireproximityprompt then
-                pcall(function() fireproximityprompt(stand.Prompt) end)
-            end
-            if stand.Prompt.InputHoldBegin then
-                pcall(function()
-                    stand.Prompt:InputHoldBegin()
-                    task.wait(0.02)
-                    stand.Prompt:InputHoldEnd()
-                end)
-            end
-            task.wait(0.08)
-        end
-    end
-
-    -- Direct Remote Backup Trigger
-    if not CharactersBuy then
-        pcall(function()
-            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
-                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
-                and ReplicatedStorage.Remotes.Characters:FindFirstChild("Buy")
-        end)
-    end
-    
-    if CharactersBuy and #matchingStands > 0 then
-        for tier = 1, 4 do
-            for slot = 1, 3 do
-                pcall(function() CharactersBuy:FireServer(tier, slot) end)
+    else
+        -- 2. Fallback: Trigger Buy for all slots across active tiers
+        if CharactersBuy then
+            for tier = 1, 4 do
+                for slot = 1, 3 do
+                    pcall(function() CharactersBuy:FireServer(tier, slot) end)
+                end
             end
         end
     end

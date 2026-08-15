@@ -1926,19 +1926,10 @@ end
 
 
 -- ══════════════════════════════════════════════════════════
--- BULLETPROOF SMART AUTO BUY (RARITY + MUTATIONS MULTI-FILTER)
+-- GUARANTEED SMART AUTO BUY (DUAL ENGINE: DIRECT PROMPT + INSTANT REMOTE)
 -- ══════════════════════════════════════════════════════════
 
 local function executeSmartAutoBuy()
-    if not CharactersBuy then
-        pcall(function()
-            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
-                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
-                and ReplicatedStorage.Remotes.Characters:FindFirstChild("Buy")
-        end)
-    end
-    
-    local plot = getMyPlot()
     local rMode = Config.AutoBuyRarityMode or "Common & Above (Buy All)"
     local mMode = Config.AutoBuyMutationMode or "Disabled (Ignore Mutations)"
 
@@ -2003,7 +1994,7 @@ local function executeSmartAutoBuy()
             mPass = mutStr:find("demon") ~= nil
         end
 
-        -- 3. Combine Logic: Buy if matches Rarity OR matches Mutation
+        -- 3. Match Logic: Buy if matches Rarity OR matches Mutation
         if rMode == "Disabled (Ignore Rarity)" then
             return mPass
         elseif mMode == "Disabled (Ignore Mutations)" then
@@ -2013,32 +2004,74 @@ local function executeSmartAutoBuy()
         end
     end
 
-    -- Scan Plot Character Stands (e.g. Plot.Characters.Mob, Plot.Characters.Luffy, etc.)
-    if plot then
-        local charFolder = plot:FindFirstChild("Characters") or plot:FindFirstChild("Stands") or plot
-        for _, model in ipairs(charFolder:GetChildren()) do
-            if model:IsA("Model") and model ~= LocalPlayer.Character then
-                local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
-                if prompt then
-                    local uName = model.Name
-                    local cleanName = uName:lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
-                    
-                    local attrR = model:GetAttribute("Rarity") or model:GetAttribute("Tier")
-                    local rStr = attrR or (CharacterRarities and CharacterRarities[cleanName]) or (CachedModuleRarities and CachedModuleRarities[cleanName]) or "Common"
-                    
-                    local attrM = model:GetAttribute("Mutation") or model:GetAttribute("Mutations") or model:GetAttribute("Variant")
-                    local mutChild = model:FindFirstChild("Mutation") or model:FindFirstChild("Gold") or model:FindFirstChild("Diamond") or model:FindFirstChild("Astronaut")
-                    local mStr = (attrM and tostring(attrM)) or (mutChild and mutChild.Name) or (model.Name:lower():find("gold") and "Gold") or (model.Name:lower():find("astronaut") and "Astronaut") or nil
-                    
-                    if checkMatches(uName, rStr, mStr) then
-                        firePrompt(prompt)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local myPlot = getMyPlot()
+    local buyPromptsToFire = {}
+
+    -- 1. Scan ProximityPrompts across the player's plot and nearby workspace
+    local searchContainers = {}
+    if myPlot then table.insert(searchContainers, myPlot) end
+    local plotsFolder = Workspace:FindFirstChild("Plots")
+    if plotsFolder then table.insert(searchContainers, plotsFolder) end
+
+    for _, container in ipairs(searchContainers) do
+        for _, prompt in ipairs(container:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+                local pName = prompt.Name:lower()
+                local aText = prompt.ActionText:lower()
+                local oText = prompt.ObjectText:lower()
+                
+                if pName:find("buy") or aText:find("buy") or oText:find("buy") or (prompt.Parent and prompt.Parent.Name == "HumanoidRootPart") then
+                    local model = prompt:FindFirstAncestorWhichIsA("Model")
+                    if model and model ~= char and model.Name ~= "Terrain" then
+                        local uName = model.Name
+                        local cleanName = uName:lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
+                        
+                        local attrR = model:GetAttribute("Rarity") or model:GetAttribute("Tier")
+                        local rStr = attrR or (CharacterRarities and CharacterRarities[cleanName]) or (CachedModuleRarities and CachedModuleRarities[cleanName]) or "Common"
+                        
+                        local attrM = model:GetAttribute("Mutation") or model:GetAttribute("Mutations") or model:GetAttribute("Variant")
+                        local mutChild = model:FindFirstChild("Mutation") or model:FindFirstChild("Gold") or model:FindFirstChild("Diamond") or model:FindFirstChild("Astronaut")
+                        local mStr = (attrM and tostring(attrM)) or (mutChild and mutChild.Name) or (model.Name:lower():find("gold") and "Gold") or (model.Name:lower():find("astronaut") and "Astronaut") or nil
+                        
+                        if checkMatches(uName, rStr, mStr) then
+                            table.insert(buyPromptsToFire, prompt)
+                        end
                     end
                 end
             end
         end
     end
 
-    -- Direct Remote Firing for All Active Stand Slots
+    -- Fire all qualified prompts immediately
+    for _, prompt in ipairs(buyPromptsToFire) do
+        pcall(function()
+            prompt.MaxActivationDistance = 999999
+            prompt.RequiresLineOfSight = false
+            prompt.HoldDuration = 0
+        end)
+        if fireproximityprompt then
+            pcall(function() fireproximityprompt(prompt) end)
+        end
+        if prompt.InputHoldBegin then
+            pcall(function()
+                prompt:InputHoldBegin()
+                task.wait(0.02)
+                prompt:InputHoldEnd()
+            end)
+        end
+    end
+
+    -- 2. Direct Multi-Tier Remote Trigger as Instant Backup
+    if not CharactersBuy then
+        pcall(function()
+            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
+                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
+                and ReplicatedStorage.Remotes.Characters:FindFirstChild("Buy")
+        end)
+    end
+    
     if CharactersBuy then
         for tier = 1, 4 do
             for slot = 1, 3 do
@@ -2751,17 +2784,19 @@ GachaTab:CreateToggle({
                 local plot = getMyPlot()
                 local prompt, btn = getPlotRollPrompt(plot)
                 
-                -- Trigger via primary prompt or single remote fallback (No double-triggering)
+                -- Trigger Roll
                 if prompt then
                     firePrompt(prompt)
                 elseif CharactersRoll then
                     pcall(function() CharactersRoll:FireServer() end)
                 end
 
-                -- If Smart Auto Buy is enabled, check stand units after roll resolves
+                -- Instant + Post-Spawn Auto Buy Checks
                 if Config.AutoBuyByRarity then
                     task.defer(function()
-                        task.wait(0.35)
+                        task.wait(0.2)
+                        executeSmartAutoBuy()
+                        task.wait(0.3)
                         executeSmartAutoBuy()
                     end)
                 end

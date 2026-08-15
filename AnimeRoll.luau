@@ -2206,7 +2206,7 @@ local function scanPlayerCharacterInventory()
 
     local function addChar(name, explicitRarity)
         if not name or name == "" then return end
-        local nLower = tostring(name):lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)]", ""):trim()
+        local nLower = tostring(name):lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)]", ""):match("^%s*(.-)%s*$")
         if nLower == "" then return end
         
         local rStr = explicitRarity or CharacterRarities[nLower]

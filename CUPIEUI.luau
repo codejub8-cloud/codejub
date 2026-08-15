@@ -993,7 +993,7 @@ function Cupie:CreateWindow(config)
             return f
         end
 
-                function Tab:CreateSlider(opts)
+                        function Tab:CreateSlider(opts)
             local title    = opts.Name or "Slider"
             local min      = opts.Min or 0
             local max      = opts.Max or 100
@@ -1003,11 +1003,10 @@ function Cupie:CreateWindow(config)
             local order    = opts.LayoutOrder or 0
             local step     = opts.Step
 
-            -- Auto-detect decimal precision (e.g. 0.05 -> 2 decimals, 16 -> 0 decimals)
             local precision = opts.Decimals
             if precision == nil then
                 if min ~= math.floor(min) or max ~= math.floor(max) or defVal ~= math.floor(defVal) or (step and step ~= math.floor(step)) then
-                    precision = 2
+                    precision = 1
                 else
                     precision = 0
                 end
@@ -1052,7 +1051,7 @@ function Cupie:CreateWindow(config)
             lbl.Parent = f
             Cupie:RegisterTheme(lbl, "TextColor3", "text")
 
-            -- Interactive Value Box (Can Drag OR Type directly)
+            -- Interactive Value Box
             local valBox = Instance.new("TextBox")
             valBox.AutoLocalize = false
             valBox.Text = formatVal(defVal) .. suffix
@@ -1088,12 +1087,20 @@ function Cupie:CreateWindow(config)
             Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
             Cupie:RegisterTheme(fill, "BackgroundColor3", "accent")
 
-            -- Large Touch/Mouse Hitbox
+            -- Circular Visual Knob
+            local knob = Instance.new("Frame", fill)
+            knob.Size = UDim2.fromOffset(12, 12)
+            knob.Position = UDim2.new(1, -6, 0.5, -6)
+            knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            knob.BorderSizePixel = 0
+            Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+            -- Large Touch/Mouse Hitbox (28px)
             local sbtn = Instance.new("TextButton")
             sbtn.AutoLocalize = false
             sbtn.Text = ""
-            sbtn.Size = UDim2.new(1, 0, 0, 24)
-            sbtn.Position = UDim2.new(0, 0, 0.5, -12)
+            sbtn.Size = UDim2.new(1, 0, 0, 28)
+            sbtn.Position = UDim2.new(0, 0, 0.5, -14)
             sbtn.BackgroundTransparency = 1
             sbtn.Parent = bar
 
@@ -1122,7 +1129,7 @@ function Cupie:CreateWindow(config)
                 if callback then callback(v) end
             end
 
-            -- Manual type-in support (handles decimals like 2.05)
+            -- Direct Textbox Editing Support
             valBox.FocusLost:Connect(function()
                 local cleaned = valBox.Text:gsub("[^%d%.%-]", "")
                 local num = tonumber(cleaned)

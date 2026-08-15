@@ -1926,24 +1926,32 @@ end
 
 
 -- ══════════════════════════════════════════════════════════
--- ADVANCED SMART AUTO BUY (RARITY + MUTATIONS MULTI-FILTER)
+-- BULLETPROOF SMART AUTO BUY (RARITY + MUTATIONS MULTI-FILTER)
 -- ══════════════════════════════════════════════════════════
 
 local function executeSmartAutoBuy()
-    if not CharactersBuy then return end
-    local plot = getMyPlot()
+    if not CharactersBuy then
+        pcall(function()
+            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
+                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
+                and ReplicatedStorage.Remotes.Characters:FindFirstChild("Buy")
+        end)
+    end
     
+    local plot = getMyPlot()
+    local rMode = Config.AutoBuyRarityMode or "Common & Above (Buy All)"
+    local mMode = Config.AutoBuyMutationMode or "Disabled (Ignore Mutations)"
+
     local function checkMatches(unitName, unitRarity, unitMutation)
         local rRank = RarityOrder[unitRarity] or 1
         local mutStr = tostring(unitMutation or ""):lower()
 
-        -- 1. Check Rarity Filter
+        -- 1. Evaluate Rarity Filter
         local rPass = false
-        local rMode = Config.AutoBuyRarityMode or "Rare & Above"
         if rMode == "Disabled (Ignore Rarity)" then
             rPass = false
         elseif rMode == "Common & Above (Buy All)" or rMode == "Common & Above" then
-            rPass = rRank >= 1
+            rPass = true
         elseif rMode == "Rare & Above" then
             rPass = rRank >= 2
         elseif rMode == "Epic & Above" then
@@ -1963,11 +1971,12 @@ local function executeSmartAutoBuy()
             if target and unitRarity and unitRarity:lower() == target:lower() then
                 rPass = true
             end
+        else
+            rPass = true
         end
 
-        -- 2. Check Mutation Filter (Gold, Diamond, Astronaut, Demon, etc.)
+        -- 2. Evaluate Mutation Filter
         local mPass = false
-        local mMode = Config.AutoBuyMutationMode or "Disabled (Ignore Mutations)"
         if mMode == "Disabled (Ignore Mutations)" then
             mPass = false
         elseif mMode == "Any Mutation (Gold, Diamond, Astronaut, etc.)" or mMode == "Any Mutation" then
@@ -1994,28 +2003,23 @@ local function executeSmartAutoBuy()
             mPass = mutStr:find("demon") ~= nil
         end
 
-        -- 3. Evaluate Match Logic (Either, Both, or Mutation First)
-        local logic = Config.AutoBuyLogic or "Match Either (Rarity OR Mutation)"
-        if logic == "Match Both (Rarity AND Mutation)" then
-            return rPass and mPass
-        elseif logic == "Mutation First (Always Buy Mutation)" then
-            if mPass then return true end
+        -- 3. Combine Logic: Buy if matches Rarity OR matches Mutation
+        if rMode == "Disabled (Ignore Rarity)" then
+            return mPass
+        elseif mMode == "Disabled (Ignore Mutations)" then
             return rPass
-        else -- Default: Match Either (Rarity OR Mutation)
-            if rMode == "Disabled (Ignore Rarity)" then return mPass end
-            if mMode == "Disabled (Ignore Mutations)" then return rPass end
+        else
             return rPass or mPass
         end
     end
 
-    local boughtAnyPrompt = false
-
-    -- 1. Inspect Physical Shop Stands on Plot
+    -- Scan Plot Character Stands (e.g. Plot.Characters.Mob, Plot.Characters.Luffy, etc.)
     if plot then
-        for _, obj in ipairs(plot:GetDescendants()) do
-            if obj:IsA("ProximityPrompt") and (obj.Name:find("Buy") or obj.ActionText:lower():find("buy") or (obj.Parent and obj.Parent.Name:find("HumanoidRootPart"))) then
-                local model = obj:FindFirstAncestorWhichIsA("Model")
-                if model and model ~= LocalPlayer.Character then
+        local charFolder = plot:FindFirstChild("Characters") or plot:FindFirstChild("Stands") or plot
+        for _, model in ipairs(charFolder:GetChildren()) do
+            if model:IsA("Model") and model ~= LocalPlayer.Character then
+                local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
+                if prompt then
                     local uName = model.Name
                     local cleanName = uName:lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
                     
@@ -2027,34 +2031,23 @@ local function executeSmartAutoBuy()
                     local mStr = (attrM and tostring(attrM)) or (mutChild and mutChild.Name) or (model.Name:lower():find("gold") and "Gold") or (model.Name:lower():find("astronaut") and "Astronaut") or nil
                     
                     if checkMatches(uName, rStr, mStr) then
-                        boughtAnyPrompt = true
-                        firePrompt(obj)
-                        task.wait(0.04)
+                        firePrompt(prompt)
                     end
                 end
             end
         end
     end
 
-    -- 2. Direct Buy Remote Fallback
-    local tiers = (Config.BuyTargetTier == "All Tiers") and {1, 2, 3, 4} or {tonumber(tostring(Config.BuyTargetTier or "1"):match("%d+")) or 1}
-    for _, tier in ipairs(tiers) do
-        for slot = 1, 3 do
-            CharactersBuy:FireServer(tier, slot)
-            task.wait(0.04)
+    -- Direct Remote Firing for All Active Stand Slots
+    if CharactersBuy then
+        for tier = 1, 4 do
+            for slot = 1, 3 do
+                pcall(function() CharactersBuy:FireServer(tier, slot) end)
+            end
         end
     end
 end
 
-
--- Auto Lock by Selected Minimum Rarity (Verified: Flex.UpdateCharacterLock)
-local function executeAutoLockUnits()
-    if not FlexLock then return end
-    local minLockRank = getMinRankFromRule(Config.LockMinRarity)
-    pcall(function()
-        FlexLock:FireServer("AutoLock", minLockRank)
-    end)
-end
 
 -- Auto Upgrade Stats Loop (Verified from foranimell.lua: Upgrade:FireServer("Gold", "Luck" / "Inventory" / "Gold" / "Slots"))
 local function executeStatUpgrades()
@@ -2834,7 +2827,7 @@ GachaTab:CreateDropdown({
         "Specific: God Only",
         "Disabled (Ignore Rarity)"
     },
-    Default = "Rare & Above",
+    Default = "Common & Above (Buy All)",
     Callback = function(choice)
         Config.AutoBuyRarityMode = choice
     end

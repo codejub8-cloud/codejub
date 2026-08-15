@@ -1877,19 +1877,17 @@ local function getMaxSellRank(sellChoice)
     return 1
 end
 
--- Smart Auto Sell: Scan inventory and sell units below threshold rarity
+-- Smart Auto Sell: Multi-payload engine for all server implementations
 local function executeAutoSell()
     if not CharactersSell then return end
     local maxSellRank = getMaxSellRank(Config.SellThreshold)
     if maxSellRank <= 0 then return end
     
-    -- Build rarity-to-rank lookup
     local rarityRank = {}
     for rank, name in pairs(InGameRarities) do
         rarityRank[name] = rank
     end
     
-    -- Build character rarity map from module
     local charRarityMap = {}
     pcall(function()
         local cInfoMod = ReplicatedStorage:FindFirstChild("Modules") 
@@ -1907,7 +1905,6 @@ local function executeAutoSell()
         end
     end)
     
-    -- Find inventory folder
     local invFolder = nil
     pcall(function()
         local dataFolder = LocalPlayer:FindFirstChild("Data")
@@ -1919,56 +1916,60 @@ local function executeAutoSell()
         end
     end)
     
-    if not invFolder then
-        -- Fallback: Try direct sell with rank (some games accept this)
-        pcall(function() CharactersSell:FireServer(maxSellRank) end)
-        return
-    end
-    
-    -- Scan inventory and sell low-tier units
-    local toSell = {}
-    for _, item in ipairs(invFolder:GetChildren()) do
-        local rStr = nil
-        pcall(function()
-            rStr = item:GetAttribute("Rarity")
-            if not rStr or type(rStr) ~= "string" then
-                local rc = item:FindFirstChild("Rarity")
-                if rc and (rc:IsA("StringValue") or rc:IsA("IntValue")) then
-                    rStr = tostring(rc.Value)
+    -- Mode 1: Individual Item Selling
+    if invFolder then
+        local unitsToSell = {}
+        for _, item in ipairs(invFolder:GetChildren()) do
+            local rStr = nil
+            pcall(function()
+                rStr = item:GetAttribute("Rarity")
+                if not rStr or type(rStr) ~= "string" then
+                    local rc = item:FindFirstChild("Rarity")
+                    if rc and rc:IsA("ValueBase") then
+                        rStr = tostring(rc.Value)
+                    end
+                end
+            end)
+            if not rStr then
+                rStr = charRarityMap[item.Name:lower()]
+            end
+            
+            local isLocked = false
+            pcall(function()
+                isLocked = item:GetAttribute("Locked") == true
+                if not isLocked then
+                    local lockChild = item:FindFirstChild("Locked")
+                    if lockChild and lockChild:IsA("ValueBase") then isLocked = lockChild.Value == true end
+                end
+            end)
+            
+            if rStr and not isLocked then
+                local rank = rarityRank[rStr]
+                if rank and rank <= maxSellRank then
+                    table.insert(unitsToSell, item)
                 end
             end
-        end)
-        if not rStr then
-            rStr = charRarityMap[item.Name:lower()]
         end
         
-        -- Check if locked
-        local isLocked = false
-        pcall(function()
-            isLocked = item:GetAttribute("Locked") == true
-            if not isLocked then
-                local lockChild = item:FindFirstChild("Locked")
-                if lockChild then isLocked = lockChild.Value == true end
-            end
-        end)
-        
-        if rStr and not isLocked then
-            local rank = rarityRank[rStr]
-            if rank and rank <= maxSellRank then
-                table.insert(toSell, item.Name)
-            end
+        for _, unit in ipairs(unitsToSell) do
+            pcall(function() CharactersSell:FireServer(unit.Name) end)
+            pcall(function() CharactersSell:FireServer(unit) end)
+            pcall(function() CharactersSell:FireServer({unit.Name}) end)
+            task.wait(0.05)
         end
     end
     
-    -- Fire sell for each unit found
-    for _, unitName in ipairs(toSell) do
-        pcall(function() CharactersSell:FireServer(unitName) end)
-        task.wait(0.08)
-    end
+    -- Mode 2: Bulk / Rarity Name / Rank Number Remote Calls
+    pcall(function() CharactersSell:FireServer(maxSellRank) end)
+    pcall(function() CharactersSell:FireServer("SellRank", maxSellRank) end)
     
-    -- Also try bulk sell with rank as fallback
-    if #toSell == 0 then
-        pcall(function() CharactersSell:FireServer(maxSellRank) end)
+    -- Fire for each rarity name up to max rank (Common, Rare, Epic, Legendary)
+    for r = 1, maxSellRank do
+        local rName = InGameRarities[r]
+        if rName then
+            pcall(function() CharactersSell:FireServer(rName) end)
+            pcall(function() CharactersSell:FireServer("SellRarity", rName) end)
+        end
     end
 end
 
@@ -2101,48 +2102,111 @@ local function formatNumberWithCommas(amount)
     return formatted
 end
 
--- Comprehensive Currency Scanner (Leaderstats, Attributes, Data)
+-- Comprehensive Currency Scanner (Leaderstats, Attributes, Data, PlayerGui)
 local function getPlayerCurrencies()
-    local gold, gems, wins = nil, nil, nil
+    local gold = nil
+    local gems = nil
+    local wins = nil
     
     -- 1. Check Leaderstats
-    local ls = LocalPlayer:FindFirstChild("leaderstats")
-    if ls then
-        for _, child in ipairs(ls:GetChildren()) do
-            local n = child.Name:lower()
-            if n:find("gold") or n:find("coin") or n:find("money") then gold = tostring(child.Value)
-            elseif n:find("gem") or n:find("diamond") then gems = tostring(child.Value)
-            elseif n:find("win") or n:find("level") or n:find("stage") then wins = tostring(child.Value)
-            end
-        end
-    end
-    
-    -- 2. Check Player Attributes
-    if not gold or not gems then
-        for k, v in pairs(LocalPlayer:GetAttributes()) do
-            local n = tostring(k):lower()
-            if not gold and (n:find("gold") or n:find("coin")) then gold = tostring(v)
-            elseif not gems and (n:find("gem") or n:find("diamond")) then gems = tostring(v)
-            elseif not wins and (n:find("win") or n:find("level")) then wins = tostring(v)
-            end
-        end
-    end
-    
-    -- 3. Check Data Folder
-    if not gold or not gems then
-        local df = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData")
-        if df then
-            for _, child in ipairs(df:GetChildren()) do
+    pcall(function()
+        local ls = LocalPlayer:FindFirstChild("leaderstats")
+        if ls then
+            for _, child in ipairs(ls:GetChildren()) do
                 local n = child.Name:lower()
-                if not gold and (n:find("gold") or n:find("coin")) then gold = tostring(child.Value)
-                elseif not gems and (n:find("gem") or n:find("diamond")) then gems = tostring(child.Value)
-                elseif not wins and (n:find("win") or n:find("level")) then wins = tostring(child.Value)
+                local val = tostring(child.Value or (child:IsA("ValueBase") and child.Value) or "")
+                if val ~= "" and val ~= "nil" then
+                    if n:find("gold") or n:find("coin") or n:find("money") or n:find("cash") then
+                        gold = val
+                    elseif n:find("gem") or n:find("diamond") then
+                        gems = val
+                    elseif n:find("win") or n:find("level") or n:find("stage") or n:find("wave") then
+                        wins = val
+                    end
                 end
             end
         end
-    end
+    end)
     
-    return gold or "0", gems or "0", wins or "0"
+    -- 2. Check Player Attributes
+    pcall(function()
+        if not gold or not gems or not wins then
+            local attrs = LocalPlayer:GetAttributes()
+            for k, v in pairs(attrs) do
+                local n = tostring(k):lower()
+                local val = tostring(v)
+                if val ~= "" and val ~= "nil" then
+                    if not gold and (n:find("gold") or n:find("coin") or n:find("money") or n:find("cash")) then
+                        gold = val
+                    elseif not gems and (n:find("gem") or n:find("diamond")) then
+                        gems = val
+                    elseif not wins and (n:find("win") or n:find("level") or n:find("stage") or n:find("wave")) then
+                        wins = val
+                    end
+                end
+            end
+        end
+    end)
+    
+    -- 3. Check Data Folder
+    pcall(function()
+        if not gold or not gems or not wins then
+            local df = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData") or LocalPlayer:FindFirstChild("Stats")
+            if df then
+                for _, child in ipairs(df:GetChildren()) do
+                    local n = child.Name:lower()
+                    local val = tostring(child.Value or (child:IsA("ValueBase") and child.Value) or "")
+                    if val ~= "" and val ~= "nil" then
+                        if not gold and (n:find("gold") or n:find("coin") or n:find("money") or n:find("cash")) then
+                            gold = val
+                        elseif not gems and (n:find("gem") or n:find("diamond")) then
+                            gems = val
+                        elseif not wins and (n:find("win") or n:find("level") or n:find("stage") or n:find("wave")) then
+                            wins = val
+                        end
+                    end
+                end
+                for k, v in pairs(df:GetAttributes()) do
+                    local n = tostring(k):lower()
+                    local val = tostring(v)
+                    if not gold and (n:find("gold") or n:find("coin") or n:find("money")) then gold = val
+                    elseif not gems and (n:find("gem") or n:find("diamond")) then gems = val
+                    elseif not wins and (n:find("win") or n:find("level") or n:find("stage")) then wins = val
+                    end
+                end
+            end
+        end
+    end)
+    
+    -- 4. Check PlayerGui HUD as visual fallback
+    pcall(function()
+        if not gold or gold == "0" then
+            local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+            if pGui then
+                for _, desc in ipairs(pGui:GetDescendants()) do
+                    if desc:IsA("TextLabel") and desc.Visible then
+                        local text = desc.Text
+                        local textLower = text:lower()
+                        local parentName = (desc.Parent and desc.Parent.Name:lower()) or ""
+                        local nameLower = desc.Name:lower()
+                        
+                        if (nameLower:find("gold") or parentName:find("gold") or parentName:find("coin")) and text:match("%d") then
+                            local numStr = text:gsub("[^%d,.]", "")
+                            if numStr ~= "" and not gold then gold = numStr end
+                        elseif (nameLower:find("gem") or parentName:find("gem") or parentName:find("diamond")) and text:match("%d") then
+                            local numStr = text:gsub("[^%d,.]", "")
+                            if numStr ~= "" and not gems then gems = numStr end
+                        elseif (nameLower:find("win") or parentName:find("win") or nameLower:find("stage")) and text:match("%d") then
+                            local numStr = text:gsub("[^%d,.]", "")
+                            if numStr ~= "" and not wins then wins = numStr end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    
+    return tostring(gold or "0"), tostring(gems or "0"), tostring(wins or "0")
 end
 
 -- Scan Owned Characters & Count by Rarity
@@ -2197,42 +2261,40 @@ local function scanPlayerCharacterInventory()
     end)
     
     if invFolder then
-        for _, item in ipairs(invFolder:GetChildren()) do
-            totalChars = totalChars + 1
-            local rStr = nil
-            
-            -- Safe rarity extraction with pcall
-            pcall(function()
-                local attrRarity = item:GetAttribute("Rarity")
-                if attrRarity and type(attrRarity) == "string" then
-                    rStr = attrRarity
-                else
-                    local rarityChild = item:FindFirstChild("Rarity")
-                    if rarityChild then
-                        if rarityChild:IsA("StringValue") or rarityChild:IsA("IntValue") or rarityChild:IsA("NumberValue") then
+        pcall(function()
+            for _, item in ipairs(invFolder:GetChildren()) do
+                totalChars = totalChars + 1
+                local rStr = nil
+                
+                pcall(function()
+                    local attrRarity = item:GetAttribute("Rarity")
+                    if attrRarity and type(attrRarity) == "string" then
+                        rStr = attrRarity
+                    else
+                        local rarityChild = item:FindFirstChild("Rarity")
+                        if rarityChild and rarityChild:IsA("ValueBase") then
                             rStr = tostring(rarityChild.Value)
                         end
                     end
+                end)
+                
+                if not rStr then
+                    local itemNameLower = item.Name:lower()
+                    rStr = charRarityMap[itemNameLower]
                 end
-            end)
-            
-            if not rStr then
-                local itemNameLower = item.Name:lower()
-                rStr = charRarityMap[itemNameLower]
-            end
-            
-            if rStr and rarityCounts[rStr] then
-                rarityCounts[rStr] = rarityCounts[rStr] + 1
-            else
-                -- Fallback check by name matching
-                for rarityName in pairs(rarityCounts) do
-                    if item.Name:lower():find(rarityName:lower()) then
-                        rarityCounts[rarityName] = rarityCounts[rarityName] + 1
-                        break
+                
+                if rStr and rarityCounts[rStr] then
+                    rarityCounts[rStr] = rarityCounts[rStr] + 1
+                else
+                    for rarityName in pairs(rarityCounts) do
+                        if item.Name:lower():find(rarityName:lower()) then
+                            rarityCounts[rarityName] = rarityCounts[rarityName] + 1
+                            break
+                        end
                     end
                 end
             end
-        end
+        end)
     end
     
     -- 3. Also scan PlacedCharacters on plot
@@ -2260,75 +2322,68 @@ end
 
 -- Live Stats Updater Loop
 local function updateDashboardStats(startTime)
-    local goldStr, gemsStr, winsStr = getPlayerCurrencies()
-    local elapsed = os.time() - startTime
-    local hrs = math.floor(elapsed / 3600)
-    local mins = math.floor((elapsed % 3600) / 60)
-    local secs = elapsed % 60
-    local timeStr = string.format("%02d:%02d:%02d", hrs, mins, secs)
-    
-    local formattedGold = formatNumberWithCommas(goldStr)
-    
-    -- 1. Prominent Gold Display Card
-    goldPara:SetTitle(" " .. formattedGold .. " GOLD")
-    goldPara:SetContent("Current Available Balance: " .. formattedGold .. " Gold Coins")
-    
-    -- 2. Other Currencies Card
-    curPara:SetTitle(LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")")
-    curPara:SetContent(string.format(
-        "• Gems (Diamonds) : %s\n" ..
-        "• Wins / Level    : %s\n" ..
-        "• Farm Duration   : %s",
-        formatNumberWithCommas(gemsStr),
-        winsStr,
-        timeStr
-    ))
-    
-    -- 3. Characters Count by Rarity
-    local rCounts, totalCount = scanPlayerCharacterInventory()
-    invRarityPara:SetTitle(string.format("Owned Characters (%d Total)", totalCount))
-    invRarityPara:SetContent(string.format(
-        "• Limited   : %d  |  INVASION : %d  |  OG       : %d\n" ..
-        "• OP        : %d  |  Immortal : %d  |  Divine   : %d\n" ..
-        "• Secret    : %d  |  Godlyx   : %d  |  Godly    : %d\n" ..
-        "• God       : %d  |  Mythic   : %d  |  Legendary: %d\n" ..
-        "• Epic      : %d  |  Rare     : %d  |  Common   : %d",
-        rCounts["Limited"] or 0, rCounts["INVASION"] or 0, rCounts["OG"] or 0,
-        rCounts["OP"] or 0, rCounts["Immortal"] or 0, rCounts["Divine"] or 0,
-        rCounts["Secret"] or 0, rCounts["Godlyx"] or 0, rCounts["Godly"] or 0,
-        rCounts["God"] or 0, rCounts["Mythic"] or 0, rCounts["Legendary"] or 0,
-        rCounts["Epic"] or 0, rCounts["Rare"] or 0, rCounts["Common"] or 0
-    ))
+    pcall(function()
+        local goldStr, gemsStr, winsStr = getPlayerCurrencies()
+        local elapsed = os.time() - (startTime or os.time())
+        local hrs = math.floor(elapsed / 3600)
+        local mins = math.floor((elapsed % 3600) / 60)
+        local secs = elapsed % 60
+        local timeStr = string.format("%02d:%02d:%02d", hrs, mins, secs)
+        
+        local formattedGold = formatNumberWithCommas(goldStr or "0")
+        
+        -- 1. Prominent Gold Display Card
+        if goldPara then
+            goldPara:SetTitle("GOLD: " .. formattedGold)
+            goldPara:SetContent("Current Balance: " .. formattedGold .. " Gold Coins")
+        end
+        
+        -- 2. Other Currencies Card
+        if curPara then
+            local dName = (LocalPlayer and LocalPlayer.DisplayName) or "Player"
+            local uName = (LocalPlayer and LocalPlayer.Name) or "User"
+            curPara:SetTitle(dName .. " (@" .. uName .. ")")
+            curPara:SetContent(string.format(
+                "• Gems (Diamonds) : %s\n" ..
+                "• Wins / Level    : %s\n" ..
+                "• Farm Duration   : %s",
+                formatNumberWithCommas(gemsStr or "0"),
+                tostring(winsStr or "0"),
+                tostring(timeStr)
+            ))
+        end
+        
+        -- 3. Characters Count by Rarity
+        if invRarityPara then
+            local rCounts, totalCount = scanPlayerCharacterInventory()
+            rCounts = rCounts or {}
+            totalCount = totalCount or 0
+            invRarityPara:SetTitle(string.format("Owned Characters (%d Total)", totalCount))
+            invRarityPara:SetContent(string.format(
+                "• Limited   : %d  |  INVASION : %d  |  OG       : %d\n" ..
+                "• OP        : %d  |  Immortal : %d  |  Divine   : %d\n" ..
+                "• Secret    : %d  |  Godlyx   : %d  |  Godly    : %d\n" ..
+                "• God       : %d  |  Mythic   : %d  |  Legendary: %d\n" ..
+                "• Epic      : %d  |  Rare     : %d  |  Common   : %d",
+                rCounts["Limited"] or 0, rCounts["INVASION"] or 0, rCounts["OG"] or 0,
+                rCounts["OP"] or 0, rCounts["Immortal"] or 0, rCounts["Divine"] or 0,
+                rCounts["Secret"] or 0, rCounts["Godlyx"] or 0, rCounts["Godly"] or 0,
+                rCounts["God"] or 0, rCounts["Mythic"] or 0, rCounts["Legendary"] or 0,
+                rCounts["Epic"] or 0, rCounts["Rare"] or 0, rCounts["Common"] or 0
+            ))
+        end
+    end)
 end
 
 task.spawn(function()
     local startTime = os.time()
-    
-    -- Wait for game data to load before first scan
-    task.wait(1.5)
-    
-    -- Initial update wrapped in pcall to prevent thread death
-    local initOk, initErr = pcall(function()
-        updateDashboardStats(startTime)
-    end)
-    if not initOk then
-        -- Set fallback display instead of staying on "Scanning..."
-        pcall(function() goldPara:SetTitle("🪙 GOLD") end)
-        pcall(function() goldPara:SetContent("Waiting for data to load...") end)
-        pcall(function() curPara:SetContent("Loading currencies...") end)
-        pcall(function() invRarityPara:SetContent("Loading inventory...") end)
-    end
-    
-    -- Continuous live update loop (fully pcall-protected)
+    updateDashboardStats(startTime)
     while true do
-        task.wait(1.5)
-        pcall(function()
-            updateDashboardStats(startTime)
-        end)
+        task.wait(1.0)
+        updateDashboardStats(startTime)
     end
 end)
 
--- ══════════════════════════════════════════════════════════
 -- TAB 2: GACHA & SUMMON ENGINE (ระบบสุ่ม & ซื้อ/ขาย/ล็อคตามระดับ)
 -- ══════════════════════════════════════════════════════════
 local GachaTab = Window:CreateTab("Gacha", 2)

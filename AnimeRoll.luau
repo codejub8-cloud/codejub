@@ -3,6 +3,15 @@
 --  Ultra-Clean Modular UI Framework
 -- =========================================================
 
+-- Kill any previously running script threads and GUIs instantly
+if _G.CupieHubUnload then pcall(_G.CupieHubUnload) end
+if shared.CupieHubUnload then pcall(shared.CupieHubUnload) end
+
+local currentRunToken = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
+_G.CupieRunToken = currentRunToken
+shared.CupieRunToken = currentRunToken
+
+
 local Cupie = {}
 Cupie.__index = Cupie
 
@@ -161,16 +170,23 @@ Cupie.Loops = {}
 Cupie.ActiveConnections = {}
 Cupie.Toggles = {}
 
+_G.CupieHubUnload = function()
+    _G.CupieRunToken = nil
+    shared.CupieRunToken = nil
+    if Cupie and Cupie.Unload then Cupie:Unload() end
+end
+shared.CupieHubUnload = _G.CupieHubUnload
+
 function Cupie:AddConnection(conn)
     table.insert(Cupie.ActiveConnections, conn)
     return conn
 end
 
 function Cupie:StartLoop(id, interval, fn)
-    if Cupie.Loops[id] then return end
-    Cupie.Loops[id] = true
+    local token = (type(Cupie.Loops[id]) == "number" and Cupie.Loops[id] or 0) + 1
+    Cupie.Loops[id] = token
     task.spawn(function()
-        while Cupie.Loops[id] do
+        while Cupie.Loops[id] == token and _G.CupieRunToken == currentRunToken do
             pcall(fn)
             task.wait(interval)
         end
@@ -178,7 +194,7 @@ function Cupie:StartLoop(id, interval, fn)
 end
 
 function Cupie:StopLoop(id)
-    Cupie.Loops[id] = nil
+    Cupie.Loops[id] = false
 end
 
 function Cupie:SafeInvoke(remote, ...)
@@ -3096,6 +3112,7 @@ GachaTab:CreateToggle({
             smoothPositionToRollPad()
             
             Cupie:StartLoop("AutoRollLoop", Config.RollDelay, function()
+                if not Config.AutoRoll then return end
                 local plot = getMyPlot()
                 local prompt, btn = getPlotRollPrompt(plot)
                 

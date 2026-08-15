@@ -2044,7 +2044,8 @@ local invRarityPara = DashTab:CreateParagraph({
 
 -- Known Character Rarity Dictionary (Instant O(1) Lookup, No require hang)
 -- ══════════════════════════════════════════════════════════
--- 15-TIER ANIME CHARACTER RARITY MATRIX & LIVE LOOKUP
+-- ══════════════════════════════════════════════════════════
+-- 15-TIER ANIME CHARACTER RARITY DATABASE (CHARACTER NAMES ONLY)
 -- ══════════════════════════════════════════════════════════
 
 local CharacterRarities = {
@@ -2101,31 +2102,8 @@ local CharacterRarities = {
     ["godly gojo"] = "Godly", ["godly sukuna"] = "Godly", ["godly saitama"] = "Godly",
 
     -- 8. Godlyx
-    ["godlyx"] = "Godlyx", ["godlyx void"] = "Godlyx", ["godlyx infinity"] = "Godlyx",
-    ["godlyx cosmic"] = "Godlyx", ["godlyx chaos"] = "Godlyx",
-
-    -- 9. Secret
-    ["secret"] = "Secret", ["shadow secret"] = "Secret", ["celestial"] = "Secret",
-    ["unknown"] = "Secret", ["hidden"] = "Secret",
-
-    -- 10. Divine
-    ["divine"] = "Divine", ["divine creator"] = "Divine", ["divine sovereign"] = "Divine",
-    ["seraph"] = "Divine", ["archangel"] = "Divine",
-
-    -- 11. Immortal
-    ["immortal"] = "Immortal", ["immortal emperor"] = "Immortal", ["immortal dragon"] = "Immortal",
-
-    -- 12. OP
-    ["op"] = "OP", ["op titan"] = "OP", ["overpowered"] = "OP",
-
-    -- 13. OG
-    ["og"] = "OG", ["og king"] = "OG", ["og prime"] = "OG", ["ancient"] = "OG",
-
-    -- 14. INVASION
-    ["invasion"] = "INVASION", ["invasion boss"] = "INVASION", ["alien invasion"] = "INVASION",
-
-    -- 15. Limited
-    ["limited"] = "Limited", ["event"] = "Limited", ["vip"] = "Limited", ["exclusive"] = "Limited"
+    ["godlyx void"] = "Godlyx", ["godlyx infinity"] = "Godlyx",
+    ["godlyx cosmic"] = "Godlyx", ["godlyx chaos"] = "Godlyx"
 }
 
 -- Asynchronous Module Cache for In-Game Exact Data
@@ -2152,113 +2130,6 @@ task.spawn(function()
 end)
 
 
-
--- Fast Number Formatting (e.g. 1,250,000)
-local function formatNumberWithCommas(amount)
-    local formatted = tostring(amount or "0"):gsub("[^%d]", "")
-    if formatted == "" then formatted = "0" end
-    local k
-    while true do
-        formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
-        if k == 0 then break end
-    end
-    return formatted
-end
-
--- Fast Direct Currency Scanner (Instant O(1))
-local function getPlayerCurrencies()
-    local gold = nil
-    local gems = nil
-    local wins = nil
-    
-    -- 1. Direct Leaderstats check
-    local ls = LocalPlayer:FindFirstChild("leaderstats")
-    if ls then
-        for _, child in ipairs(ls:GetChildren()) do
-            local n = child.Name:lower()
-            local val = tostring(child.Value or (child:IsA("ValueBase") and child.Value) or "")
-            if val ~= "" and val ~= "nil" then
-                if n:find("gold") or n:find("coin") or n:find("money") or n:find("cash") then
-                    gold = val
-                elseif n:find("gem") or n:find("diamond") then
-                    gems = val
-                elseif n:find("win") or n:find("level") or n:find("stage") or n:find("wave") then
-                    wins = val
-                end
-            end
-        end
-    end
-    
-    -- 2. Direct Player Attributes check
-    if not gold or not gems or not wins then
-        local attrs = LocalPlayer:GetAttributes()
-        for k, v in pairs(attrs) do
-            local n = tostring(k):lower()
-            local val = tostring(v)
-            if val ~= "" and val ~= "nil" then
-                if not gold and (n:find("gold") or n:find("coin") or n:find("money") or n:find("cash")) then
-                    gold = val
-                elseif not gems and (n:find("gem") or n:find("diamond")) then
-                    gems = val
-                elseif not wins and (n:find("win") or n:find("level") or n:find("stage") or n:find("wave")) then
-                    wins = val
-                end
-            end
-        end
-    end
-    
-    -- 3. Direct Data / PlayerData folder check
-    if not gold or not gems or not wins then
-        local df = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData") or LocalPlayer:FindFirstChild("Stats")
-        if df then
-            for _, child in ipairs(df:GetChildren()) do
-                local n = child.Name:lower()
-                local val = tostring(child.Value or (child:IsA("ValueBase") and child.Value) or "")
-                if val ~= "" and val ~= "nil" then
-                    if not gold and (n:find("gold") or n:find("coin") or n:find("money") or n:find("cash")) then
-                        gold = val
-                    elseif not gems and (n:find("gem") or n:find("diamond")) then
-                        gems = val
-                    elseif not wins and (n:find("win") or n:find("level") or n:find("stage") or n:find("wave")) then
-                        wins = val
-                    end
-                end
-            end
-            for k, v in pairs(df:GetAttributes()) do
-                local n = tostring(k):lower()
-                local val = tostring(v)
-                if not gold and (n:find("gold") or n:find("coin") or n:find("money")) then gold = val
-                elseif not gems and (n:find("gem") or n:find("diamond")) then gems = val
-                elseif not wins and (n:find("win") or n:find("level") or n:find("stage")) then wins = val
-                end
-            end
-        end
-    end
-
-    -- 4. Direct Fast UI Checks
-    if not gold or gold == "0" then
-        local pGui = LocalPlayer:FindFirstChild("PlayerGui")
-        if pGui then
-            local mainGui = pGui:FindFirstChild("MainGui") or pGui:FindFirstChild("ScreenGui") or pGui:FindFirstChild("HUD") or pGui:FindFirstChild("Main")
-            if mainGui then
-                for _, ch in ipairs(mainGui:GetChildren()) do
-                    if ch:IsA("Frame") or ch:IsA("TextLabel") then
-                        local n = ch.Name:lower()
-                        if ch:IsA("TextLabel") and ch.Text:match("%d") then
-                            if n:find("gold") or n:find("coin") then gold = ch.Text end
-                            if n:find("gem") or n:find("diamond") then gems = ch.Text end
-                            if n:find("win") or n:find("level") then wins = ch.Text end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
-    return tostring(gold or "0"), tostring(gems or "0"), tostring(wins or "0")
-end
-
-
 -- Fast Direct Character Inventory Scanner (Accurate 15-Rarity Classification)
 -- ══════════════════════════════════════════════════════════
 -- ULTIMATE 15-TIER ACCURATE INVENTORY SCANNER & DATASERVICE HOOK
@@ -2269,7 +2140,7 @@ end
 -- ══════════════════════════════════════════════════════════
 
 -- ══════════════════════════════════════════════════════════
--- PRECISE CHARACTER INVENTORY SCANNER (NO FALSE POSITIVES)
+-- PURE DATA-DRIVEN INVENTORY SCANNER (ZERO FALSE POSITIVES)
 -- ══════════════════════════════════════════════════════════
 
 local function scanPlayerCharacterInventory()
@@ -2309,27 +2180,20 @@ local function scanPlayerCharacterInventory()
         local nTrim = nClean:match("^%s*(.-)%s*$") or ""
         if nTrim == "" then return nil end
 
-        -- 1. Check live game module cache
+        -- 1. Check live game module cache from CharactersInfo
         if CachedModuleRarities[nTrim] and rarityCounts[CachedModuleRarities[nTrim]] then
             return CachedModuleRarities[nTrim]
         end
 
-        -- 2. Check exact character matrix dictionary
+        -- 2. Check exact character dictionary
         if CharacterRarities[nTrim] and rarityCounts[CharacterRarities[nTrim]] then
             return CharacterRarities[nTrim]
         end
 
-        -- 3. Check partial key match in character matrix
+        -- 3. Check clean substring in dictionary
         for charKey, rVal in pairs(CharacterRarities) do
-            if (nTrim:find(charKey, 1, true) or charKey:find(nTrim, 1, true)) and rarityCounts[rVal] then
+            if (nTrim == charKey or nTrim:find("^" .. charKey .. "$") or nTrim:find(charKey, 1, true)) and rarityCounts[rVal] then
                 return rVal
-            end
-        end
-
-        -- 4. Check if name contains rarity word
-        for rName in pairs(rarityCounts) do
-            if nTrim:find(rName:lower(), 1, true) then
-                return rName
             end
         end
 
@@ -2347,8 +2211,8 @@ local function scanPlayerCharacterInventory()
         local nClean = raw:gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " ")
         local nTrim = nClean:match("^%s*(.-)%s*$") or ""
         
-        -- Filter out invalid UI words and system strings
-        if nTrim == "" or nTrim == "gold" or nTrim == "level" or nTrim == "slot" or nTrim == "button" or nTrim == "image" or nTrim == "frame" or nTrim == "pass" or nTrim == "shop" or nTrim == "index" or nTrim == "trade" or nTrim == "items" or nTrim == "animes" or nTrim == "profile" or nTrim == "upgr" or nTrim == "upgrades" or nTrim == "boost" then
+        -- Filter out non-character words
+        if nTrim == "" or nTrim == "gold" or nTrim == "level" or nTrim == "slot" or nTrim == "button" or nTrim == "image" or nTrim == "frame" or nTrim == "pass" or nTrim == "shop" or nTrim == "index" or nTrim == "trade" or nTrim == "items" or nTrim == "animes" or nTrim == "profile" or nTrim == "upgr" or nTrim == "upgrades" or nTrim == "boost" or nTrim == "limited" or nTrim == "epic" or nTrim == "rare" or nTrim == "common" or nTrim == "legendary" or nTrim == "mythic" or nTrim == "secret" or nTrim == "god" then
             return
         end
         
@@ -2359,28 +2223,33 @@ local function scanPlayerCharacterInventory()
         end
     end
 
-    local dataServiceFound = false
+    local foundFromData = false
 
-    -- 1. Query Client DataService (Profile Ground Truth)
+    -- 1. Direct DataService Profile Access (Bag + Hotbar Profile)
     pcall(function()
         local dataServMod = ReplicatedStorage:FindFirstChild("Data") and ReplicatedStorage.Data:FindFirstChild("DataService")
         if dataServMod then
             local ds = require(dataServMod)
-            local clientDS = (type(ds) == "table" and (ds.client or ds.Client or ds)) or nil
-            if clientDS and type(clientDS.get) == "function" then
-                for _, category in ipairs({"Inventory", "Characters", "Hotbar", "Units"}) do
-                    local catData = clientDS:get({category})
-                    if type(catData) == "table" and next(catData) ~= nil then
-                        dataServiceFound = true
-                        for k, v in pairs(catData) do
-                            if type(v) == "table" then
-                                local cName = v.Name or v.CharacterName or v.Id or k
-                                local cRarity = v.Rarity or v.Tier
-                                local cUID = v.UUID or v.UID or (category .. "_" .. tostring(k))
-                                addChar(cName, cRarity, cUID)
-                            elseif type(v) == "string" then
-                                addChar(v, nil, category .. "_" .. tostring(k))
-                            end
+            local client = (type(ds) == "table" and (ds.client or ds.Client or ds)) or ds
+            
+            for _, key in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped"}) do
+                local invList = nil
+                pcall(function() invList = client:get(LocalPlayer, {key}) end)
+                if not invList then pcall(function() invList = client:get({key}) end) end
+                if not invList then pcall(function() invList = ds:get(LocalPlayer, {key}) end) end
+                if not invList and client.Data then invList = client.Data[key] end
+                if not invList and client.Profile then invList = client.Profile[key] end
+                
+                if type(invList) == "table" and next(invList) ~= nil then
+                    foundFromData = true
+                    for k, v in pairs(invList) do
+                        if type(v) == "table" then
+                            local cName = v.Name or v.CharacterName or v.Id or tostring(k)
+                            local cRarity = v.Rarity or v.Tier
+                            local cUID = v.UUID or v.UID or (key .. "_" .. tostring(k))
+                            addChar(cName, cRarity, cUID)
+                        elseif type(v) == "string" then
+                            addChar(v, nil, key .. "_" .. tostring(k))
                         end
                     end
                 end
@@ -2388,30 +2257,32 @@ local function scanPlayerCharacterInventory()
         end
     end)
 
-    -- 2. Query LocalPlayer.Data Folders (Bag Inventory + Equipped)
+    -- 2. LocalPlayer Data / PlayerData Folders
     pcall(function()
         local dataFolder = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData")
         if dataFolder then
-            for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped", "Team"}) do
+            for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped"}) do
                 local sub = dataFolder:FindFirstChild(folderName)
-                if sub then
+                if sub and #sub:GetChildren() > 0 then
+                    foundFromData = true
                     for _, item in ipairs(sub:GetChildren()) do
                         local attrR = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
                         local rChild = item:FindFirstChild("Rarity") or item:FindFirstChild("Tier")
                         local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
-                        local itemUID = item:GetAttribute("UUID") or ("data_" .. item:GetFullName())
+                        local itemUID = item:GetAttribute("UUID") or ("df_" .. item:GetFullName())
                         addChar(item.Name, rVal, itemUID)
                     end
                 end
             end
         end
     end)
-    
-    -- 3. Scan LocalPlayer Direct Storage Folders
+
+    -- 3. LocalPlayer Direct Storage Folders
     pcall(function()
         for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped"}) do
             local sub = LocalPlayer:FindFirstChild(folderName)
-            if sub then
+            if sub and #sub:GetChildren() > 0 then
+                foundFromData = true
                 for _, item in ipairs(sub:GetChildren()) do
                     local attrR = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
                     local rChild = item:FindFirstChild("Rarity") or item:FindFirstChild("Tier")
@@ -2423,48 +2294,30 @@ local function scanPlayerCharacterInventory()
         end
     end)
 
-    -- 4. Scan Placed Player Units on Plot (STRICT: Ignore Shop Stands / NPCs with BuyPrompt)
-    pcall(function()
-        local plot = getMyPlot()
-        if plot then
-            for _, obj in ipairs(plot:GetDescendants()) do
-                if obj:IsA("Model") and obj ~= LocalPlayer.Character then
-                    -- STRICT FILTER: Ignore shop stands, roll buttons, NPCs with BuyPrompt / RollPrompt
-                    local hasBuyPrompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true) ~= nil
-                    local hasFlexUI = obj:FindFirstChild("FlexUI", true) ~= nil or obj:FindFirstChild("BillboardGui", true) ~= nil
-                    local isCharacterModel = CharacterRarities[obj.Name:lower()] ~= nil or obj:FindFirstChild("Humanoid") ~= nil
-                    
-                    -- Only count player-placed units (has FlexUI or no BuyPrompt)
-                    if isCharacterModel and not hasBuyPrompt then
-                        local chRarity = obj:GetAttribute("Rarity") or obj:GetAttribute("Tier")
-                        local chUID = obj:GetAttribute("UUID") or ("plot_" .. obj:GetFullName())
-                        addChar(obj.Name, chRarity, chUID)
-                    end
-                end
-            end
-        end
-    end)
-
-    -- 5. Scan Bottom Hotbar Slots in PlayerGui (Strict Hotbar Container Only)
+    -- 4. Bottom Hotbar Slots in PlayerGui (Strict Slot Detection, No general UI search)
     pcall(function()
         local pGui = LocalPlayer:FindFirstChild("PlayerGui")
         if pGui then
             for _, g in ipairs(pGui:GetChildren()) do
                 if g:IsA("ScreenGui") and g.Name ~= "CUPIEUI" and g.Enabled then
-                    -- Find only the hotbar slot cards
-                    for _, slot in ipairs(g:GetDescendants()) do
-                        if slot:IsA("Frame") or slot:IsA("ImageLabel") then
-                            local lvLabel = slot:FindFirstChild("Level") or slot:FindFirstChild("Lv") or slot:FindFirstChildWhichIsA("TextLabel")
-                            if lvLabel and (lvLabel.Text:lower():find("lv") or lvLabel.Text:match("^%d+$")) then
-                                for _, textLabel in ipairs(slot:GetChildren()) do
-                                    if textLabel:IsA("TextLabel") and textLabel ~= lvLabel and textLabel.Text ~= "" then
-                                        local txtLower = textLabel.Text:lower()
-                                        if CharacterRarities[txtLower] or CharacterRarities[txtLower:match("^%s*(.-)%s*$")] then
-                                            local slotUID = "hotbar_" .. slot:GetFullName()
-                                            addChar(txtLower, nil, slotUID)
-                                        end
+                    for _, desc in ipairs(g:GetDescendants()) do
+                        -- Look only for slot card elements that have a Level Label and a Character Name label
+                        if (desc:IsA("Frame") or desc:IsA("ImageLabel")) and (desc.Name:lower():find("slot") or desc.Name:match("^%d+$")) then
+                            local lvLabel = nil
+                            local nameLabel = nil
+                            for _, ch in ipairs(desc:GetChildren()) do
+                                if ch:IsA("TextLabel") and ch.Visible then
+                                    local txt = ch.Text:lower()
+                                    if txt:find("lv") or txt:match("^%d+$") then
+                                        lvLabel = ch
+                                    elseif CharacterRarities[txt] or CharacterRarities[txt:match("^%s*(.-)%s*$")] then
+                                        nameLabel = ch
                                     end
                                 end
+                            end
+                            if lvLabel and nameLabel then
+                                local slotUID = "hotbar_slot_" .. desc:GetFullName()
+                                addChar(nameLabel.Text, desc:GetAttribute("Rarity"), slotUID)
                             end
                         end
                     end

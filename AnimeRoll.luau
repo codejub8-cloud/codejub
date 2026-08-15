@@ -2172,35 +2172,64 @@ local function parseFormattedNumber(val)
     return n
 end
 
+
 local function getCurrentPlayerGold()
-    -- 1. Direct DataService Profile
+    -- 1. Scan PlayerGui for active Gold display text
+    local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if pGui then
+        for _, gui in ipairs(pGui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Name ~= "CUPIEUI" and gui.Enabled then
+                for _, lbl in ipairs(gui:GetDescendants()) do
+                    if lbl:IsA("TextLabel") and lbl.Visible then
+                        local txt = lbl.Text:match("^%s*(.-)%s*$") or ""
+                        local lName = lbl.Name:lower()
+                        local pName = (lbl.Parent and lbl.Parent.Name:lower()) or ""
+                        if (lName:find("gold") or lName:find("coin") or pName:find("gold") or pName:find("coin")) and txt:match("%d") then
+                            local n = parseFormattedNumber(txt)
+                            if n > 0 then return n end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- 2. LocalPlayer Live ValueBase Folders
+    for _, fName in ipairs({"Data", "leaderstats", "PlayerData"}) do
+        local dFolder = LocalPlayer:FindFirstChild(fName)
+        if dFolder then
+            for _, gName in ipairs({"Gold", "Coins", "Money"}) do
+                local gVal = dFolder:FindFirstChild(gName)
+                if gVal and gVal:IsA("ValueBase") and tonumber(gVal.Value) then
+                    return tonumber(gVal.Value)
+                end
+            end
+        end
+    end
+
+    -- 3. DataService profile accessor
     local dsGold = nil
     pcall(function()
         local dataServMod = ReplicatedStorage:FindFirstChild("Data") and ReplicatedStorage.Data:FindFirstChild("DataService")
         if dataServMod then
             local ds = require(dataServMod)
             local client = (type(ds) == "table" and (ds.client or ds.Client or ds)) or ds
-            dsGold = client:get(LocalPlayer, {"Gold"}) or client:get({"Gold"})
+            if client and client.get then
+                dsGold = client:get(LocalPlayer, {"Gold"}) or client:get({"Gold"})
+            end
+            if not dsGold and client.Profile and client.Profile.Gold then
+                dsGold = client.Profile.Gold
+            end
         end
     end)
-    if dsGold and type(dsGold) == "number" and dsGold > 0 then
+    if dsGold and type(dsGold) == "number" and dsGold >= 0 then
         return dsGold
     end
 
-    -- 2. LocalPlayer Data Folders
-    local dFolder = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("leaderstats") or LocalPlayer:FindFirstChild("PlayerData")
-    if dFolder then
-        local gVal = dFolder:FindFirstChild("Gold") or dFolder:FindFirstChild("Coins") or dFolder:FindFirstChild("Money")
-        if gVal and gVal:IsA("ValueBase") and tonumber(gVal.Value) then
-            return tonumber(gVal.Value)
-        end
-    end
-
-    -- 3. Screen Currency Parser
+    -- 4. Screen Currency Parser fallback
     local gStr, _, _ = getPlayerCurrencies()
     return parseFormattedNumber(gStr)
 end
-
 
 
 local function getStandTargetInfo(model)
@@ -2337,7 +2366,7 @@ local function executeSmartAutoBuy()
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local myPlot = getMyPlot()
 
-    -- 1. Scan candidate models
+    -- 1. Scan candidate models on the plot and nearby
     local candidateModels = {}
     if myPlot then
         local charFolder = myPlot:FindFirstChild("Characters") or myPlot:FindFirstChild("Stands") or myPlot:FindFirstChild("Roll")
@@ -2393,17 +2422,17 @@ local function executeSmartAutoBuy()
         end
     end
 
-    -- Process each matching target: If money is not enough, PAUSE & WAIT until money is ready!
+    -- Process each matching target: Strict Gold Check & Pause Loop
     for _, target in ipairs(matchingTargets) do
         local requiredCost = target.Cost or 200
         
-        -- Loop wait until player has enough Gold (Pauses auto roll so unit is not lost!)
-        while Config.AutoRoll and Config.AutoBuyByRarity and target.Model and target.Model.Parent and getCurrentPlayerGold() < requiredCost do
-            task.wait(0.4)
+        -- STRICT WAIT: If player does NOT have enough gold, pause execution until gold is farmed!
+        while Config.AutoBuyByRarity and target.Model and target.Model.Parent and getCurrentPlayerGold() < requiredCost do
+            task.wait(0.3)
         end
         
-        -- Buy the stand unit
-        if target.Model and target.Model.Parent then
+        -- Purchase stand once gold is sufficient
+        if target.Model and target.Model.Parent and getCurrentPlayerGold() >= requiredCost then
             if target.Prompt then
                 pcall(function()
                     target.Prompt.MaxActivationDistance = 999999
@@ -3140,19 +3169,26 @@ GachaTab:CreateToggle({
             
             Cupie:StartLoop("AutoRollLoop", Config.RollDelay, function()
                 if not Config.AutoRoll then return end
+                
+                -- 1. Before rolling, ensure any unbought target units on the stand are purchased
+                if Config.AutoBuyByRarity then
+                    executeSmartAutoBuy()
+                end
+                
+                if not Config.AutoRoll then return end
+                
+                -- 2. Trigger Roll
                 local plot = getMyPlot()
                 local prompt, btn = getPlotRollPrompt(plot)
-                
-                -- 1. Trigger Roll
                 if prompt then
                     firePrompt(prompt)
                 elseif CharactersRoll then
                     pcall(function() CharactersRoll:FireServer() end)
                 end
 
-                -- 2. Synchronous Auto Buy & Fund-Wait Check (Stops roll from overwriting unbought target units!)
+                -- 3. Wait for new roll to land on stand (0.35s) and buy immediately
+                task.wait(0.35)
                 if Config.AutoBuyByRarity then
-                    task.wait(0.35)
                     executeSmartAutoBuy()
                 end
             end)

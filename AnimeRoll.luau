@@ -1955,44 +1955,47 @@ local Window = Cupie:CreateWindow({
 })
 
 -- ══════════════════════════════════════════════════════════
--- TAB 1: DASHBOARD & STATS (CLEAN, HIGH-LEGIBILITY TELEMETRY)
+-- TAB 1: DASHBOARD & STATS (GOLD HIGHLIGHT & RARITY INVENTORY ONLY)
 -- ══════════════════════════════════════════════════════════
 local DashTab = Window:CreateTab("Stats", 1)
 
-DashTab:CreateHeader("Account & Currencies", 1)
+DashTab:CreateHeader("GOLD & TREASURY", 1)
 
-local walletPara = DashTab:CreateParagraph({
-    Title = "Wallet Overview",
-    Content = "Scanning wallet...",
+-- Highlighted Gold Balance Card
+local goldPara = DashTab:CreateParagraph({
+    Title = "💰 GOLD BALANCE",
+    Content = "Scanning Gold balance...",
     LayoutOrder = 2
 })
 
-DashTab:CreateHeader("Plot & Active Squad", 3)
+DashTab:CreateHeader("OTHER CURRENCIES & SESSION", 3)
 
-local plotPara = DashTab:CreateParagraph({
-    Title = "Plot & Deployment",
-    Content = "Scanning plot status...",
+local curPara = DashTab:CreateParagraph({
+    Title = "Account Currencies",
+    Content = "Scanning currencies...",
     LayoutOrder = 4
 })
 
-DashTab:CreateHeader("Active Automations Status", 5)
+DashTab:CreateHeader("CHARACTER INVENTORY BY RARITY", 5)
 
-local statusPara = DashTab:CreateParagraph({
-    Title = "System Engine Status",
-    Content = "Checking background loops...",
+local invRarityPara = DashTab:CreateParagraph({
+    Title = "Owned Characters Breakdown",
+    Content = "Scanning character inventory...",
     LayoutOrder = 6
 })
 
-DashTab:CreateHeader("15 In-Game Rarity Progression", 7)
-
-local raritiesSummary = DashTab:CreateParagraph({
-    Title = "Rarity Tier Hierarchy",
-    Content = "Tier 1 (Godly)  :  Limited  ➔  INVASION  ➔  OG  ➔  OP\n" ..
-              "Tier 2 (Divine) :  Immortal ➔  Divine   ➔  Secret ➔ Godlyx\n" ..
-              "Tier 3 (Mythic) :  Godly   ➔  God      ➔  Mythic ➔ Legendary\n" ..
-              "Tier 4 (Basic)  :  Epic    ➔  Rare     ➔  Common",
-    LayoutOrder = 8
-})
+-- Number formatting with commas (e.g. 1,000,000)
+local function formatNumberWithCommas(amount)
+    local formatted = tostring(amount)
+    local num = tonumber(formatted:gsub("[^%d]", ""))
+    if not num then return formatted end
+    local k
+    while true do
+        formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
+        if k == 0 then break end
+    end
+    return formatted
+end
 
 -- Comprehensive Currency Scanner (Leaderstats, Attributes, Data)
 local function getPlayerCurrencies()
@@ -2038,7 +2041,98 @@ local function getPlayerCurrencies()
     return gold or "0", gems or "0", wins or "0"
 end
 
--- Ultra-Clean Real-time Dashboard Formatter
+-- Scan Owned Characters & Count by Rarity
+local function scanPlayerCharacterInventory()
+    local rarityCounts = {
+        ["Limited"]   = 0,
+        ["INVASION"]  = 0,
+        ["OG"]        = 0,
+        ["OP"]        = 0,
+        ["Immortal"]  = 0,
+        ["Divine"]    = 0,
+        ["Secret"]    = 0,
+        ["Godlyx"]    = 0,
+        ["Godly"]     = 0,
+        ["God"]       = 0,
+        ["Mythic"]    = 0,
+        ["Legendary"] = 0,
+        ["Epic"]      = 0,
+        ["Rare"]      = 0,
+        ["Common"]    = 0
+    }
+    local totalChars = 0
+    
+    -- 1. Try require CharactersInfo module if available
+    local charRarityMap = {}
+    pcall(function()
+        local cInfoMod = ReplicatedStorage:FindFirstChild("Modules") 
+            and ReplicatedStorage.Modules:FindFirstChild("Characters") 
+            and ReplicatedStorage.Modules.Characters:FindFirstChild("CharactersInfo")
+        if cInfoMod then
+            local info = require(cInfoMod)
+            if info and info.Characters then
+                for cName, cData in pairs(info.Characters) do
+                    if cData.Rarity then
+                        charRarityMap[tostring(cName):lower()] = cData.Rarity
+                    end
+                end
+            end
+        end
+    end)
+    
+    -- 2. Scan Data / Inventory Folder
+    local invFolder = LocalPlayer:FindFirstChild("Data") and (LocalPlayer.Data:FindFirstChild("Inventory") or LocalPlayer.Data:FindFirstChild("Characters"))
+    if not invFolder then
+        invFolder = LocalPlayer:FindFirstChild("Inventory") or LocalPlayer:FindFirstChild("Characters")
+    end
+    
+    if invFolder then
+        for _, item in ipairs(invFolder:GetChildren()) do
+            totalChars = totalChars + 1
+            local itemRarity = item:GetAttribute("Rarity") or item:FindFirstChild("Rarity")
+            local rStr = itemRarity and (type(itemRarity) == "string" and itemRarity or itemRarity.Value) or nil
+            
+            if not rStr then
+                local itemNameLower = item.Name:lower()
+                rStr = charRarityMap[itemNameLower]
+            end
+            
+            if rStr and rarityCounts[rStr] then
+                rarityCounts[rStr] = rarityCounts[rStr] + 1
+            else
+                -- Fallback check by name matching
+                for rarityName in pairs(rarityCounts) do
+                    if item.Name:lower():find(rarityName:lower()) then
+                        rarityCounts[rarityName] = rarityCounts[rarityName] + 1
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    -- 3. Also scan PlacedCharacters on plot
+    local plot = getMyPlot()
+    if plot and plot:FindFirstChild("PlacedCharacters") then
+        for _, ch in ipairs(plot.PlacedCharacters:GetChildren()) do
+            local chRarity = ch:GetAttribute("Rarity")
+            if not chRarity then
+                chRarity = charRarityMap[ch.Name:lower()]
+            end
+            if chRarity and rarityCounts[chRarity] then
+                -- Avoid double counting if already in invFolder
+                if not invFolder then
+                    totalChars = totalChars + 1
+                    rarityCounts[chRarity] = rarityCounts[chRarity] + 1
+                end
+            end
+        end
+    end
+    
+    return rarityCounts, totalChars
+end
+
+-- Live Stats Updater Loop
 local function updateDashboardStats(startTime)
     local goldStr, gemsStr, winsStr = getPlayerCurrencies()
     local elapsed = os.time() - startTime
@@ -2047,53 +2141,37 @@ local function updateDashboardStats(startTime)
     local secs = elapsed % 60
     local timeStr = string.format("%02d:%02d:%02d", hrs, mins, secs)
     
-    -- 1. Wallet Overview
-    walletPara:SetTitle(LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")")
-    walletPara:SetContent(string.format(
-        "• Gold Balance  : %s\n" ..
-        "• Gems Balance  : %s\n" ..
-        "• Wins / Level  : %s\n" ..
-        "• Farm Uptime   : %s",
-        goldStr, gemsStr, winsStr, timeStr
+    local formattedGold = formatNumberWithCommas(goldStr)
+    
+    -- 1. Prominent Gold Display Card
+    goldPara:SetTitle("🪙  " .. formattedGold .. " GOLD")
+    goldPara:SetContent("Current Available Balance: " .. formattedGold .. " Gold Coins")
+    
+    -- 2. Other Currencies Card
+    curPara:SetTitle(LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")")
+    curPara:SetContent(string.format(
+        "• Gems (Diamonds) : %s\n" ..
+        "• Wins / Level    : %s\n" ..
+        "• Farm Duration   : %s",
+        formatNumberWithCommas(gemsStr),
+        winsStr,
+        timeStr
     ))
     
-    -- 2. Plot & Deployment
-    local plot = getMyPlot()
-    local plotName = plot and plot.Name or "Assigned"
-    local totalPlots = Workspace:FindFirstChild("Plots") and #Workspace.Plots:GetChildren() or 0
-    
-    local deployedCount = 0
-    local unitNames = {}
-    if plot and plot:FindFirstChild("PlacedCharacters") then
-        for _, ch in ipairs(plot.PlacedCharacters:GetChildren()) do
-            deployedCount = deployedCount + 1
-            table.insert(unitNames, ch.Name)
-        end
-    end
-    
-    plotPara:SetTitle(string.format("Plot: %s (Server Plots: %d)", plotName, totalPlots))
-    plotPara:SetContent(string.format(
-        "• Units on Field : %d Character(s)\n" ..
-        "• Active Squad   : %s",
-        deployedCount,
-        (deployedCount > 0) and table.concat(unitNames, ", ") or "None (Enable Auto Equip Best in Upgrades)"
-    ))
-    
-    -- 3. System Status
-    statusPara:SetTitle("Background Automations")
-    statusPara:SetContent(string.format(
-        "• Auto Roll    : %s (Delay: %.1fs)\n" ..
-        "• Auto Equip   : %s (Best Team)\n" ..
-        "• Auto Level   : %s (Continuous)\n" ..
-        "• Auto Fight   : %s (Infinite Battles)\n" ..
-        "• Smart Buy    : %s (Rule: %s)",
-        Config.AutoRoll and "[ ACTIVE ]" or "[ INACTIVE ]",
-        Config.RollDelay,
-        Config.AutoEquipBest and "[ ACTIVE ]" or "[ INACTIVE ]",
-        Config.AutoLevelUp and "[ ACTIVE ]" or "[ INACTIVE ]",
-        Config.AutoFight and "[ ACTIVE ]" or "[ INACTIVE ]",
-        Config.AutoBuyByRarity and "[ ACTIVE ]" or "[ INACTIVE ]",
-        Config.BuyRuleRarity
+    -- 3. Characters Count by Rarity
+    local rCounts, totalCount = scanPlayerCharacterInventory()
+    invRarityPara:SetTitle(string.format("Owned Characters (%d Total)", totalCount))
+    invRarityPara:SetContent(string.format(
+        "• Limited   : %d  |  INVASION : %d  |  OG       : %d\n" ..
+        "• OP        : %d  |  Immortal : %d  |  Divine   : %d\n" ..
+        "• Secret    : %d  |  Godlyx   : %d  |  Godly    : %d\n" ..
+        "• God       : %d  |  Mythic   : %d  |  Legendary: %d\n" ..
+        "• Epic      : %d  |  Rare     : %d  |  Common   : %d",
+        rCounts["Limited"] or 0, rCounts["INVASION"] or 0, rCounts["OG"] or 0,
+        rCounts["OP"] or 0, rCounts["Immortal"] or 0, rCounts["Divine"] or 0,
+        rCounts["Secret"] or 0, rCounts["Godlyx"] or 0, rCounts["Godly"] or 0,
+        rCounts["God"] or 0, rCounts["Mythic"] or 0, rCounts["Legendary"] or 0,
+        rCounts["Epic"] or 0, rCounts["Rare"] or 0, rCounts["Common"] or 0
     ))
 end
 

@@ -2190,8 +2190,6 @@ end)
 -- TAB 2: 🎰 GACHA & SUMMON ENGINE (ระบบสุ่ม & ซื้อ/ขาย/ล็อคตามระดับ)
 -- ══════════════════════════════════════════════════════════
 local GachaTab = Window:CreateTab("Gacha", 2)
-GachaTab:CreateHeader("Auto Roll & Summon Engine", 1)
-
 GachaTab:CreateToggle({
     Name = "Auto Roll (Fast Summon)",
     Description = "Automatically triggers roll proximity prompt and remote without stuttering",
@@ -2260,7 +2258,7 @@ GachaTab:CreateSlider({
     end
 })
 
-GachaTab:CreateHeader("Smart Auto Buy By Rarity (ซื้อเฉพาะระดับที่เลือก)", 3)
+", 3)
 
 GachaTab:CreateDropdown({
     Name = "Buy Minimum Rarity",
@@ -2313,7 +2311,7 @@ GachaTab:CreateToggle({
     end
 })
 
-GachaTab:CreateHeader("Auto Lock Units (เลือกระดับที่ต้องการล็อค)", 7)
+", 7)
 
 GachaTab:CreateDropdown({
     Name = "Auto Lock Minimum Rarity",
@@ -2358,7 +2356,7 @@ GachaTab:CreateToggle({
     end
 })
 
-GachaTab:CreateHeader("Auto Delete / Sell (เลือกระดับที่ต้องการขาย)", 10)
+", 10)
 
 GachaTab:CreateDropdown({
     Name = "Auto Sell Up To Rarity",
@@ -2395,8 +2393,6 @@ GachaTab:CreateToggle({
         end
     end
 })
-
-GachaTab:CreateHeader("Target Stop Roll & Lucky Wheel", 13)
 
 GachaTab:CreateDropdown({
     Name = "Target Stop Rarity",

@@ -1951,57 +1951,7 @@ task.spawn(function()
     end
 end)
 
-DashTab:CreateHeader("Master Auto Farm Controls", 7)
 
-DashTab:CreateToggle({
-    Name = "Auto Equip Best Units",
-    Description = "Automatically and continuously keeps your strongest team equipped",
-    Badge = "BEST",
-    Default = false,
-    Callback = function(state)
-        Config.AutoEquipBest = state
-        if state then
-            triggerEquipBest()
-            Cupie:StartLoop("AutoEquipBestLoop", 1.5, function() triggerEquipBest() end)
-        else
-            Cupie:StopLoop("AutoEquipBestLoop")
-        end
-    end
-})
-
-DashTab:CreateToggle({
-    Name = "Auto Level Up Team",
-    Description = "Continuously upgrades character levels as Gold is earned",
-    Badge = "UPGRADE",
-    Default = false,
-    Callback = function(state)
-        Config.AutoLevelUp = state
-        if state then
-            Cupie:StartLoop("AutoLevelUpLoop", 1.0, function()
-                if CharactersLevelUp then CharactersLevelUp:FireServer() end
-            end)
-        else
-            Cupie:StopLoop("AutoLevelUpLoop")
-        end
-    end
-})
-
-DashTab:CreateToggle({
-    Name = "Auto Evolve Characters",
-    Description = "Automatically evolves characters as soon as requirements are met",
-    Badge = "EVOLVE",
-    Default = false,
-    Callback = function(state)
-        Config.AutoEvolve = state
-        if state then
-            Cupie:StartLoop("AutoEvolveLoop", 3.0, function()
-                if EvolutionRemote then EvolutionRemote:FireServer({}) end
-            end)
-        else
-            Cupie:StopLoop("AutoEvolveLoop")
-        end
-    end
-})
 
 -- ══════════════════════════════════════════════════════════
 -- TAB 2: 🎰 GACHA & SUMMON ENGINE (ระบบสุ่ม & ซื้อ/ขาย/ล็อคตามระดับ)
@@ -2290,7 +2240,59 @@ GachaTab:CreateButton({
 -- TAB 3: 👥 TEAM & STAT UPGRADES (พัฒนาสเตตัส & สุ่ม Trait)
 -- ══════════════════════════════════════════════════════════
 local UpgradeTab = Window:CreateTab("Upgrades", 3)
-UpgradeTab:CreateHeader("Account Stat Upgrades (Verified Remotes)", 1)
+UpgradeTab:CreateHeader("Team & Character Progression (Auto Controls)", 1)
+
+UpgradeTab:CreateToggle({
+    Name = "Auto Equip Best Units",
+    Description = "Automatically and continuously keeps your strongest team equipped",
+    Badge = "BEST",
+    Default = false,
+    Callback = function(state)
+        Config.AutoEquipBest = state
+        if state then
+            triggerEquipBest()
+            Cupie:StartLoop("AutoEquipBestLoop", 1.5, function() triggerEquipBest() end)
+        else
+            Cupie:StopLoop("AutoEquipBestLoop")
+        end
+    end
+})
+
+UpgradeTab:CreateToggle({
+    Name = "Auto Level Up Team",
+    Description = "Continuously upgrades character levels as Gold is earned",
+    Badge = "UPGRADE",
+    Default = false,
+    Callback = function(state)
+        Config.AutoLevelUp = state
+        if state then
+            Cupie:StartLoop("AutoLevelUpLoop", 1.0, function()
+                if CharactersLevelUp then CharactersLevelUp:FireServer() end
+            end)
+        else
+            Cupie:StopLoop("AutoLevelUpLoop")
+        end
+    end
+})
+
+UpgradeTab:CreateToggle({
+    Name = "Auto Evolve Characters",
+    Description = "Automatically evolves characters as soon as requirements are met",
+    Badge = "EVOLVE",
+    Default = false,
+    Callback = function(state)
+        Config.AutoEvolve = state
+        if state then
+            Cupie:StartLoop("AutoEvolveLoop", 3.0, function()
+                if EvolutionRemote then EvolutionRemote:FireServer({}) end
+            end)
+        else
+            Cupie:StopLoop("AutoEvolveLoop")
+        end
+    end
+})
+
+UpgradeTab:CreateHeader("Account Stat Upgrades (Verified Remotes)", 5)
 
 UpgradeTab:CreateToggle({
     Name = "Auto Upgrade All Stats (Luck/Bag/Gold/Slots)",

@@ -3271,75 +3271,13 @@ GachaTab:CreateToggle({
     Callback = function(state)
         Config.AutoRoll = state
         if state then
-            -- Position on pad once when starting
             smoothPositionToRollPad()
-            
             Cupie:StartLoop("AutoRollLoop", 0.3, function()
-                if not Config.AutoRoll then return end
-                
-                -- STEP 1: Inspect matching target characters on the stands
-                if Config.AutoBuyByRarity then
-                    local currentTargets = getMatchingStandTargets()
-                    
-                    if #currentTargets > 0 then
-                        for _, target in ipairs(currentTargets) do
-                            local requiredCost = target.Cost or 200
-                            
-                            -- STRICT BLOCKING PAUSE: As long as money is not enough, FREEZE ROLL AND WAIT!
-                            while Config.AutoRoll and Config.AutoBuyByRarity and target.Model and target.Model.Parent and getCurrentPlayerGold() < requiredCost do
-                                task.wait(0.4)
-                            end
-                            
-                            -- When money is enough, BUY IT!
-                            if target.Model and target.Model.Parent and getCurrentPlayerGold() >= requiredCost then
-                                buyStandTarget(target)
-                                task.wait(0.2)
-                            end
-                        end
-                    end
-                end
-                
-                if not Config.AutoRoll then return end
-                
-                -- Check again if any matching target is STILL unbought because money is still insufficient
-                if Config.AutoBuyByRarity then
-                    local remainingTargets = getMatchingStandTargets()
-                    for _, target in ipairs(remainingTargets) do
-                        local requiredCost = target.Cost or 200
-                        if getCurrentPlayerGold() < requiredCost then
-                            -- STILL INSUFFICIENT GOLD: DO NOT ROLL! RETURN IMMEDIATELY AND WAIT!
-                            return
-                        end
-                    end
-                end
-                
-                -- STEP 2: Trigger Roll (Only reached when no unbought matching targets exist!)
-                local plot = getMyPlot()
-                local prompt, btn = getPlotRollPrompt(plot)
-                if prompt then
-                    firePrompt(prompt)
-                elseif CharactersRoll then
-                    pcall(function() CharactersRoll:FireServer() end)
-                end
-
-                -- STEP 3: Wait for newly rolled characters to spawn on stand (0.35s)
-                task.wait(0.35)
-                
-                -- STEP 4: Inspect new roll and buy immediately if funds are ready
-                if Config.AutoBuyByRarity then
-                    local newTargets = getMatchingStandTargets()
-                    for _, target in ipairs(newTargets) do
-                        local requiredCost = target.Cost or 200
-                        if getCurrentPlayerGold() >= requiredCost then
-                            buyStandTarget(target)
-                            task.wait(0.1)
-                        end
-                    end
-                end
-                
-                -- STEP 5: Wait user configured Roll Delay before next attempt
-                task.wait(math.max(1.0, Config.RollDelay - 0.35))
+                performAutoRollStep()
             end)
+        else
+            Cupie:StopLoop("AutoRollLoop")
+        end
     end
 })
 

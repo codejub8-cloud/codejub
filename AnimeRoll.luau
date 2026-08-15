@@ -2444,6 +2444,13 @@ end
 local function buyStandTarget(target)
     if not target or not target.Model or not target.Model.Parent then return end
     
+    -- STRICT HARD GUARD: NEVER fire prompt or remote if player does not have enough Gold!
+    local curGold = getCurrentPlayerGold()
+    local cost = target.Cost or 200
+    if curGold < cost then
+        return false
+    end
+    
     if not CharactersBuy then
         pcall(function()
             CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
@@ -3180,6 +3187,79 @@ task.spawn(function()
 end)
 
 
+
+-- ══════════════════════════════════════════════════════════
+-- UNIFIED MASTER AUTO ROLL & FUND-LOCK STEP FUNCTION
+-- ══════════════════════════════════════════════════════════
+
+local function performAutoRollStep()
+    if not Config.AutoRoll then return end
+
+    -- STEP 1: If Smart Auto Buy is enabled, inspect current stands
+    if Config.AutoBuyByRarity then
+        local targets = getMatchingStandTargets()
+        
+        if #targets > 0 then
+            for _, target in ipairs(targets) do
+                local requiredCost = target.Cost or 200
+                local curGold = getCurrentPlayerGold()
+                
+                -- HARD LOCKOUT: If money is not enough, DO NOT BUY AND DO NOT ROLL!
+                -- Freeze loop and wait until gold is farmed from combat!
+                while Config.AutoRoll and Config.AutoBuyByRarity and target.Model and target.Model.Parent and getCurrentPlayerGold() < requiredCost do
+                    task.wait(0.4)
+                end
+                
+                -- When gold is strictly sufficient, BUY IT!
+                if target.Model and target.Model.Parent and getCurrentPlayerGold() >= requiredCost then
+                    buyStandTarget(target)
+                    task.wait(0.2)
+                end
+            end
+        end
+        
+        -- Check if ANY target is still unbought because gold is not yet sufficient
+        local remaining = getMatchingStandTargets()
+        for _, t in ipairs(remaining) do
+            if getCurrentPlayerGold() < (t.Cost or 200) then
+                -- CANNOT ROLL: Freeze right here and return!
+                return
+            end
+        end
+    end
+
+    if not Config.AutoRoll then return end
+
+    -- STEP 2: All matching targets bought (or stand is clear): TRIGGER ROLL!
+    local plot = getMyPlot()
+    local prompt, btn = getPlotRollPrompt(plot)
+    if prompt then
+        firePrompt(prompt)
+    elseif CharactersRoll then
+        pcall(function() CharactersRoll:FireServer() end)
+    end
+
+    -- STEP 3: Wait for new roll animation & stand models to update (0.35s)
+    task.wait(0.35)
+
+    -- STEP 4: Inspect new roll: If funds are already sufficient, buy immediately
+    if Config.AutoBuyByRarity then
+        local newTargets = getMatchingStandTargets()
+        for _, target in ipairs(newTargets) do
+            local cost = target.Cost or 200
+            if getCurrentPlayerGold() >= cost then
+                buyStandTarget(target)
+                task.wait(0.1)
+            end
+            -- If gold is not enough, DO NOT BUY! The next performAutoRollStep will freeze and wait!
+        end
+    end
+
+    -- STEP 5: Wait user configured Roll Delay
+    task.wait(math.max(1.0, Config.RollDelay - 0.35))
+end
+
+
 -- TAB 2: GACHA & SUMMON ENGINE (ระบบสุ่ม & ซื้อ/ขาย/ล็อคตามระดับ)
 -- ══════════════════════════════════════════════════════════
 local GachaTab = Window:CreateTab("Gacha", 2)
@@ -3274,24 +3354,6 @@ GachaTab:CreateSlider({
     Suffix = "s",
     Callback = function(val)
         Config.RollDelay = math.max(2.0, val)
-        if Config.AutoRoll then
-            Cupie:StopLoop("AutoRollLoop")
-            Cupie:StartLoop("AutoRollLoop", Config.RollDelay, function()
-                local plot = getMyPlot()
-                local prompt, btn = getPlotRollPrompt(plot)
-                if prompt then
-                    firePrompt(prompt)
-                elseif CharactersRoll then
-                    pcall(function() CharactersRoll:FireServer() end)
-                end
-                if Config.AutoBuyByRarity then
-                    task.defer(function()
-                        task.wait(0.35)
-                        executeSmartAutoBuy()
-                    end)
-                end
-            end)
-        end
     end
 })
 

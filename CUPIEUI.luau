@@ -1281,7 +1281,7 @@ function Cupie:CreateWindow(config)
 
             local curValLbl = Instance.new("TextLabel")
             curValLbl.AutoLocalize = false
-            curValLbl.Text = selected .. " ▾"
+            curValLbl.Text = selected .. " v"
             curValLbl.Font = Enum.Font.GothamBold
             curValLbl.TextSize = 11
             curValLbl.TextColor3 = Cupie.C.accent
@@ -1324,7 +1324,7 @@ function Cupie:CreateWindow(config)
 
                 optBtn.MouseButton1Click:Connect(function()
                     selected = optName
-                    curValLbl.Text = selected .. " ▾"
+                    curValLbl.Text = selected .. " v"
                     expanded = false
                     TweenService:Create(container, TweenInfo.new(0.2, Enum.EasingStyle.Quint), {
                         Size = UDim2.new(1, 0, 0, 38)
@@ -1341,7 +1341,7 @@ function Cupie:CreateWindow(config)
             headerBtn.MouseButton1Click:Connect(function()
                 expanded = not expanded
                 local targetH = expanded and (44 + #options * 28) or 38
-                curValLbl.Text = selected .. (expanded and " ▴" or " ▾")
+                curValLbl.Text = selected .. (expanded and " ^" or " v")
                 TweenService:Create(container, TweenInfo.new(0.2, Enum.EasingStyle.Quint), {
                     Size = UDim2.new(1, 0, 0, targetH)
                 }):Play()

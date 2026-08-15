@@ -2267,8 +2267,6 @@ GachaTab:CreateSlider({
     end
 })
 
-", 3)
-
 GachaTab:CreateDropdown({
     Name = "Buy Minimum Rarity",
     Description = "Only automatically buys characters that meet or exceed this rarity",
@@ -2320,8 +2318,6 @@ GachaTab:CreateToggle({
     end
 })
 
-", 7)
-
 GachaTab:CreateDropdown({
     Name = "Auto Lock Minimum Rarity",
     Description = "Select which minimum rarity to automatically protect & lock",
@@ -2364,8 +2360,6 @@ GachaTab:CreateToggle({
         end
     end
 })
-
-", 10)
 
 GachaTab:CreateDropdown({
     Name = "Auto Sell Up To Rarity",

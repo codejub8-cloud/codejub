@@ -2881,49 +2881,6 @@ GachaTab:CreateToggle({
 })
 
 GachaTab:CreateDropdown({
-    Name = "Auto Lock Minimum Rarity",
-    Description = "Select which minimum rarity to automatically protect & lock",
-    Options = {
-        "Legendary & Above",
-        "Mythic & Above",
-        "God & Above",
-        "Godly & Above",
-        "Godlyx & Above",
-        "Secret & Above",
-        "Divine & Above",
-        "Immortal & Above",
-        "OP & Above",
-        "OG & Above",
-        "INVASION & Above",
-        "Limited Only",
-        "Epic & Above",
-        "Rare & Above",
-        "All Units"
-    },
-    Default = "Legendary & Above",
-    Callback = function(choice)
-        Config.LockMinRarity = choice
-        if Config.AutoLockRareUnits then executeAutoLockUnits() end
-    end
-})
-
-GachaTab:CreateToggle({
-    Name = "Auto Lock Rare Units",
-    Description = "Locks high-tier characters automatically based on selected rarity",
-    Badge = "LOCK",
-    Default = true,
-    Callback = function(state)
-        Config.AutoLockRareUnits = state
-        if state then
-            executeAutoLockUnits()
-            Cupie:StartLoop("AutoLockLoop", 2.0, function() executeAutoLockUnits() end)
-        else
-            Cupie:StopLoop("AutoLockLoop")
-        end
-    end
-})
-
-GachaTab:CreateDropdown({
     Name = "Auto Sell Up To Rarity",
     Description = "Select maximum rarity to automatically sell for Gold",
     Options = {

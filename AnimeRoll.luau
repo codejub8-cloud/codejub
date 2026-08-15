@@ -1955,43 +1955,46 @@ local Window = Cupie:CreateWindow({
 })
 
 -- ══════════════════════════════════════════════════════════
--- TAB 1: DASHBOARD & STATS (NO EMOJIS, CLEAN TELEMETRY)
+-- TAB 1: DASHBOARD & STATS (CLEAN, HIGH-LEGIBILITY TELEMETRY)
 -- ══════════════════════════════════════════════════════════
 local DashTab = Window:CreateTab("Stats", 1)
-DashTab:CreateHeader("Player Account & Wallet", 1)
+
+DashTab:CreateHeader("Account & Currencies", 1)
 
 local walletPara = DashTab:CreateParagraph({
-    Title = "Live Currencies",
-    Content = "Scanning wallet and currencies...",
+    Title = "Wallet Overview",
+    Content = "Scanning wallet...",
     LayoutOrder = 2
 })
 
-DashTab:CreateHeader("Plot & Deployed Team", 3)
+DashTab:CreateHeader("Plot & Active Squad", 3)
 
 local plotPara = DashTab:CreateParagraph({
-    Title = "Plot Status",
-    Content = "Scanning assigned plot...",
+    Title = "Plot & Deployment",
+    Content = "Scanning plot status...",
     LayoutOrder = 4
 })
 
-local teamPara = DashTab:CreateParagraph({
-    Title = "Equipped Characters",
-    Content = "Scanning deployed units...",
-    LayoutOrder = 5
+DashTab:CreateHeader("Active Automations Status", 5)
+
+local statusPara = DashTab:CreateParagraph({
+    Title = "System Engine Status",
+    Content = "Checking background loops...",
+    LayoutOrder = 6
 })
 
-DashTab:CreateHeader("15 In-Game Rarity Progression", 6)
+DashTab:CreateHeader("15 In-Game Rarity Progression", 7)
 
 local raritiesSummary = DashTab:CreateParagraph({
-    Title = "Rarity Hierarchy",
-    Content = "15. Limited   14. INVASION   13. OG   12. OP\n" ..
-        "11. Immortal   10. Divine   9. Secret   8. Godlyx\n" ..
-        "7. Godly   6. God   5. Mythic   4. Legendary\n" ..
-        "3. Epic   2. Rare   1. Common",
-    LayoutOrder = 7
+    Title = "Rarity Tier Hierarchy",
+    Content = "Tier 1 (Godly)  :  Limited  ➔  INVASION  ➔  OG  ➔  OP\n" ..
+              "Tier 2 (Divine) :  Immortal ➔  Divine   ➔  Secret ➔ Godlyx\n" ..
+              "Tier 3 (Mythic) :  Godly   ➔  God      ➔  Mythic ➔ Legendary\n" ..
+              "Tier 4 (Basic)  :  Epic    ➔  Rare     ➔  Common",
+    LayoutOrder = 8
 })
 
--- Comprehensive Currency Scanner (Leaderstats, Attributes, Data, PlayerGui)
+-- Comprehensive Currency Scanner (Leaderstats, Attributes, Data)
 local function getPlayerCurrencies()
     local gold, gems, wins = nil, nil, nil
     
@@ -2032,10 +2035,10 @@ local function getPlayerCurrencies()
         end
     end
     
-    return gold or "Connected", gems or "Connected", wins or "0"
+    return gold or "0", gems or "0", wins or "0"
 end
 
--- Live Stats Updater Loop (Runs immediately + every 1s)
+-- Ultra-Clean Real-time Dashboard Formatter
 local function updateDashboardStats(startTime)
     local goldStr, gemsStr, winsStr = getPlayerCurrencies()
     local elapsed = os.time() - startTime
@@ -2044,20 +2047,20 @@ local function updateDashboardStats(startTime)
     local secs = elapsed % 60
     local timeStr = string.format("%02d:%02d:%02d", hrs, mins, secs)
     
+    -- 1. Wallet Overview
     walletPara:SetTitle(LocalPlayer.DisplayName .. " (@" .. LocalPlayer.Name .. ")")
-    walletPara:SetContent(string.format("Gold: %s   |   Gems: %s\nWins / Level: %s   |   Farm Uptime: %s", goldStr, gemsStr, winsStr, timeStr))
+    walletPara:SetContent(string.format(
+        "• Gold Balance  : %s\n" ..
+        "• Gems Balance  : %s\n" ..
+        "• Wins / Level  : %s\n" ..
+        "• Farm Uptime   : %s",
+        goldStr, gemsStr, winsStr, timeStr
+    ))
     
+    -- 2. Plot & Deployment
     local plot = getMyPlot()
     local plotName = plot and plot.Name or "Assigned"
     local totalPlots = Workspace:FindFirstChild("Plots") and #Workspace.Plots:GetChildren() or 0
-    
-    plotPara:SetTitle(string.format("Plot: %s (Total Server Plots: %d)", plotName, totalPlots))
-    plotPara:SetContent(string.format("Active Automations: EquipBest [%s] | LevelUp [%s] | Evolve [%s] | AutoFight [%s]", 
-        Config.AutoEquipBest and "ON" or "OFF",
-        Config.AutoLevelUp and "ON" or "OFF",
-        Config.AutoEvolve and "ON" or "OFF",
-        Config.AutoFight and "ON" or "OFF"
-    ))
     
     local deployedCount = 0
     local unitNames = {}
@@ -2068,11 +2071,30 @@ local function updateDashboardStats(startTime)
         end
     end
     
-    teamPara:SetTitle(string.format("Deployed Team (%d Units on Field)", deployedCount))
-    teamPara:SetContent((deployedCount > 0) 
-        and ("Units: " .. table.concat(unitNames, ", "))
-        or "No units deployed currently. (Enable Auto Equip Best in Upgrades tab)"
-    )
+    plotPara:SetTitle(string.format("Plot: %s (Server Plots: %d)", plotName, totalPlots))
+    plotPara:SetContent(string.format(
+        "• Units on Field : %d Character(s)\n" ..
+        "• Active Squad   : %s",
+        deployedCount,
+        (deployedCount > 0) and table.concat(unitNames, ", ") or "None (Enable Auto Equip Best in Upgrades)"
+    ))
+    
+    -- 3. System Status
+    statusPara:SetTitle("Background Automations")
+    statusPara:SetContent(string.format(
+        "• Auto Roll    : %s (Delay: %.1fs)\n" ..
+        "• Auto Equip   : %s (Best Team)\n" ..
+        "• Auto Level   : %s (Continuous)\n" ..
+        "• Auto Fight   : %s (Infinite Battles)\n" ..
+        "• Smart Buy    : %s (Rule: %s)",
+        Config.AutoRoll and "[ ACTIVE ]" or "[ INACTIVE ]",
+        Config.RollDelay,
+        Config.AutoEquipBest and "[ ACTIVE ]" or "[ INACTIVE ]",
+        Config.AutoLevelUp and "[ ACTIVE ]" or "[ INACTIVE ]",
+        Config.AutoFight and "[ ACTIVE ]" or "[ INACTIVE ]",
+        Config.AutoBuyByRarity and "[ ACTIVE ]" or "[ INACTIVE ]",
+        Config.BuyRuleRarity
+    ))
 end
 
 task.spawn(function()

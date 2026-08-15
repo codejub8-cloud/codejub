@@ -1578,7 +1578,7 @@ local InGameRarities = {
 local Config = {
     -- Gacha & Auto Roll
     AutoRoll            = false,
-    RollDelay           = 0.12,
+    RollDelay           = 2.00,
     
     -- Smart Auto Buy by Rarity
     AutoBuyByRarity     = false,
@@ -2047,14 +2047,14 @@ GachaTab:CreateToggle({
 
 GachaTab:CreateSlider({
     Name = "Roll Speed / Delay",
-    Description = "Interval between each roll attempt (seconds)",
-    Min = 0.05,
-    Max = 1.50,
-    Default = 0.12,
+    Description = "Interval between each roll attempt (seconds, min 2.0s)",
+    Min = 2.00,
+    Max = 10.00,
+    Default = 2.00,
     Decimals = 2,
     Suffix = "s",
     Callback = function(val)
-        Config.RollDelay = val
+        Config.RollDelay = math.max(2.00, val)
         if Config.AutoRoll then
             Cupie:StopLoop("AutoRollLoop")
             Cupie:StartLoop("AutoRollLoop", Config.RollDelay, function()

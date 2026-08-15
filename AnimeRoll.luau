@@ -1877,6 +1877,101 @@ local function getMaxSellRank(sellChoice)
     return 1
 end
 
+-- Smart Auto Sell: Scan inventory and sell units below threshold rarity
+local function executeAutoSell()
+    if not CharactersSell then return end
+    local maxSellRank = getMaxSellRank(Config.SellThreshold)
+    if maxSellRank <= 0 then return end
+    
+    -- Build rarity-to-rank lookup
+    local rarityRank = {}
+    for rank, name in pairs(InGameRarities) do
+        rarityRank[name] = rank
+    end
+    
+    -- Build character rarity map from module
+    local charRarityMap = {}
+    pcall(function()
+        local cInfoMod = ReplicatedStorage:FindFirstChild("Modules") 
+            and ReplicatedStorage.Modules:FindFirstChild("Characters") 
+            and ReplicatedStorage.Modules.Characters:FindFirstChild("CharactersInfo")
+        if cInfoMod then
+            local info = require(cInfoMod)
+            if info and info.Characters then
+                for cName, cData in pairs(info.Characters) do
+                    if cData and cData.Rarity then
+                        charRarityMap[tostring(cName):lower()] = cData.Rarity
+                    end
+                end
+            end
+        end
+    end)
+    
+    -- Find inventory folder
+    local invFolder = nil
+    pcall(function()
+        local dataFolder = LocalPlayer:FindFirstChild("Data")
+        if dataFolder then
+            invFolder = dataFolder:FindFirstChild("Inventory") or dataFolder:FindFirstChild("Characters")
+        end
+        if not invFolder then
+            invFolder = LocalPlayer:FindFirstChild("Inventory") or LocalPlayer:FindFirstChild("Characters")
+        end
+    end)
+    
+    if not invFolder then
+        -- Fallback: Try direct sell with rank (some games accept this)
+        pcall(function() CharactersSell:FireServer(maxSellRank) end)
+        return
+    end
+    
+    -- Scan inventory and sell low-tier units
+    local toSell = {}
+    for _, item in ipairs(invFolder:GetChildren()) do
+        local rStr = nil
+        pcall(function()
+            rStr = item:GetAttribute("Rarity")
+            if not rStr or type(rStr) ~= "string" then
+                local rc = item:FindFirstChild("Rarity")
+                if rc and (rc:IsA("StringValue") or rc:IsA("IntValue")) then
+                    rStr = tostring(rc.Value)
+                end
+            end
+        end)
+        if not rStr then
+            rStr = charRarityMap[item.Name:lower()]
+        end
+        
+        -- Check if locked
+        local isLocked = false
+        pcall(function()
+            isLocked = item:GetAttribute("Locked") == true
+            if not isLocked then
+                local lockChild = item:FindFirstChild("Locked")
+                if lockChild then isLocked = lockChild.Value == true end
+            end
+        end)
+        
+        if rStr and not isLocked then
+            local rank = rarityRank[rStr]
+            if rank and rank <= maxSellRank then
+                table.insert(toSell, item.Name)
+            end
+        end
+    end
+    
+    -- Fire sell for each unit found
+    for _, unitName in ipairs(toSell) do
+        pcall(function() CharactersSell:FireServer(unitName) end)
+        task.wait(0.08)
+    end
+    
+    -- Also try bulk sell with rank as fallback
+    if #toSell == 0 then
+        pcall(function() CharactersSell:FireServer(maxSellRank) end)
+    end
+end
+
 -- Smart Auto Buy by Rarity Function
 local function executeSmartAutoBuy()
     if not CharactersBuy then return end
@@ -2081,7 +2176,7 @@ local function scanPlayerCharacterInventory()
             local info = require(cInfoMod)
             if info and info.Characters then
                 for cName, cData in pairs(info.Characters) do
-                    if cData.Rarity then
+                    if cData and cData.Rarity then
                         charRarityMap[tostring(cName):lower()] = cData.Rarity
                     end
                 end
@@ -2090,16 +2185,36 @@ local function scanPlayerCharacterInventory()
     end)
     
     -- 2. Scan Data / Inventory Folder
-    local invFolder = LocalPlayer:FindFirstChild("Data") and (LocalPlayer.Data:FindFirstChild("Inventory") or LocalPlayer.Data:FindFirstChild("Characters"))
-    if not invFolder then
-        invFolder = LocalPlayer:FindFirstChild("Inventory") or LocalPlayer:FindFirstChild("Characters")
-    end
+    local invFolder = nil
+    pcall(function()
+        local dataFolder = LocalPlayer:FindFirstChild("Data")
+        if dataFolder then
+            invFolder = dataFolder:FindFirstChild("Inventory") or dataFolder:FindFirstChild("Characters")
+        end
+        if not invFolder then
+            invFolder = LocalPlayer:FindFirstChild("Inventory") or LocalPlayer:FindFirstChild("Characters")
+        end
+    end)
     
     if invFolder then
         for _, item in ipairs(invFolder:GetChildren()) do
             totalChars = totalChars + 1
-            local itemRarity = item:GetAttribute("Rarity") or item:FindFirstChild("Rarity")
-            local rStr = itemRarity and (type(itemRarity) == "string" and itemRarity or itemRarity.Value) or nil
+            local rStr = nil
+            
+            -- Safe rarity extraction with pcall
+            pcall(function()
+                local attrRarity = item:GetAttribute("Rarity")
+                if attrRarity and type(attrRarity) == "string" then
+                    rStr = attrRarity
+                else
+                    local rarityChild = item:FindFirstChild("Rarity")
+                    if rarityChild then
+                        if rarityChild:IsA("StringValue") or rarityChild:IsA("IntValue") or rarityChild:IsA("NumberValue") then
+                            rStr = tostring(rarityChild.Value)
+                        end
+                    end
+                end
+            end)
             
             if not rStr then
                 local itemNameLower = item.Name:lower()
@@ -2121,22 +2236,24 @@ local function scanPlayerCharacterInventory()
     end
     
     -- 3. Also scan PlacedCharacters on plot
-    local plot = getMyPlot()
-    if plot and plot:FindFirstChild("PlacedCharacters") then
-        for _, ch in ipairs(plot.PlacedCharacters:GetChildren()) do
-            local chRarity = ch:GetAttribute("Rarity")
-            if not chRarity then
-                chRarity = charRarityMap[ch.Name:lower()]
-            end
-            if chRarity and rarityCounts[chRarity] then
-                -- Avoid double counting if already in invFolder
-                if not invFolder then
-                    totalChars = totalChars + 1
-                    rarityCounts[chRarity] = rarityCounts[chRarity] + 1
+    pcall(function()
+        local plot = getMyPlot()
+        if plot and plot:FindFirstChild("PlacedCharacters") then
+            for _, ch in ipairs(plot.PlacedCharacters:GetChildren()) do
+                local chRarity = nil
+                pcall(function() chRarity = ch:GetAttribute("Rarity") end)
+                if not chRarity then
+                    chRarity = charRarityMap[ch.Name:lower()]
+                end
+                if chRarity and rarityCounts[chRarity] then
+                    if not invFolder then
+                        totalChars = totalChars + 1
+                        rarityCounts[chRarity] = rarityCounts[chRarity] + 1
+                    end
                 end
             end
         end
-    end
+    end)
     
     return rarityCounts, totalChars
 end
@@ -2186,9 +2303,25 @@ end
 
 task.spawn(function()
     local startTime = os.time()
-    updateDashboardStats(startTime)
+    
+    -- Wait for game data to load before first scan
+    task.wait(1.5)
+    
+    -- Initial update wrapped in pcall to prevent thread death
+    local initOk, initErr = pcall(function()
+        updateDashboardStats(startTime)
+    end)
+    if not initOk then
+        -- Set fallback display instead of staying on "Scanning..."
+        pcall(function() goldPara:SetTitle("🪙 GOLD") end)
+        pcall(function() goldPara:SetContent("Waiting for data to load...") end)
+        pcall(function() curPara:SetContent("Loading currencies...") end)
+        pcall(function() invRarityPara:SetContent("Loading inventory...") end)
+    end
+    
+    -- Continuous live update loop (fully pcall-protected)
     while true do
-        task.wait(1.0)
+        task.wait(1.5)
         pcall(function()
             updateDashboardStats(startTime)
         end)
@@ -2379,17 +2512,14 @@ GachaTab:CreateDropdown({
 
 GachaTab:CreateToggle({
     Name = "Auto Delete / Sell Low Tier",
-    Description = "Sells low rarity units continuously to free inventory and earn Gold",
+    Description = "Scans inventory and sells units below selected rarity for Gold",
     Badge = "SELL",
     Default = false,
     Callback = function(state)
         Config.AutoSellLowTier = state
         if state then
-            Cupie:StartLoop("AutoSellLoop", 1.0, function()
-                local maxSellRank = getMaxSellRank(Config.SellThreshold)
-                if CharactersSell and maxSellRank > 0 then
-                    pcall(function() CharactersSell:FireServer(maxSellRank) end)
-                end
+            Cupie:StartLoop("AutoSellLoop", 2.0, function()
+                executeAutoSell()
             end)
         else
             Cupie:StopLoop("AutoSellLoop")

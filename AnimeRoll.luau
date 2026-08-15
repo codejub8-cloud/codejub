@@ -2863,30 +2863,6 @@ GachaTab:CreateDropdown({
     end
 })
 
-GachaTab:CreateDropdown({
-    Name = "Auto Buy - Match Logic",
-    Description = "Determine how Rarity and Mutation filters are combined",
-    Options = {
-        "Match Either (Rarity OR Mutation)",
-        "Match Both (Rarity AND Mutation)",
-        "Mutation First (Always Buy Mutation)"
-    },
-    Default = "Match Either (Rarity OR Mutation)",
-    Callback = function(choice)
-        Config.AutoBuyLogic = choice
-    end
-})
-
-GachaTab:CreateDropdown({
-    Name = "Auto Buy - Shop Tier",
-    Description = "Select which Tier stand shop to buy from",
-    Options = {"All Tiers", "Tier 1", "Tier 2", "Tier 3", "Tier 4"},
-    Default = "All Tiers",
-    Callback = function(choice)
-        Config.BuyTargetTier = choice
-    end
-})
-
 GachaTab:CreateToggle({
     Name = "Enable Smart Auto Buy",
     Description = "Continuously buys characters matching your Rarity & Mutation criteria",

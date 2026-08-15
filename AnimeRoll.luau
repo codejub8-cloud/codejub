@@ -2260,6 +2260,10 @@ end
 
 
 -- Fast Direct Character Inventory Scanner (Accurate 15-Rarity Classification)
+-- ══════════════════════════════════════════════════════════
+-- ULTIMATE 15-TIER ACCURATE INVENTORY SCANNER & DATASERVICE HOOK
+-- ══════════════════════════════════════════════════════════
+
 local function scanPlayerCharacterInventory()
     local rarityCounts = {
         ["Limited"]   = 0,
@@ -2279,6 +2283,7 @@ local function scanPlayerCharacterInventory()
         ["Common"]    = 0
     }
     local totalChars = 0
+    local seenUIDs = {}
 
     local function resolveRarity(rawName, explicitRarity)
         if explicitRarity and rarityCounts[explicitRarity] then
@@ -2323,8 +2328,13 @@ local function scanPlayerCharacterInventory()
         return "Common"
     end
 
-    local function addChar(name, explicitRarity)
+    local function addChar(name, explicitRarity, uid)
         if not name or name == "" then return end
+        if uid then
+            if seenUIDs[uid] then return end
+            seenUIDs[uid] = true
+        end
+
         local raw = tostring(name):lower()
         local nClean = raw:gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " ")
         local nTrim = nClean:match("^%s*(.-)%s*$") or ""
@@ -2339,70 +2349,97 @@ local function scanPlayerCharacterInventory()
         end
     end
     
-    local foundInData = false
+    local foundInService = false
 
-    -- 1. Scan Data / PlayerData Folder
+    -- 1. Scan via ReplicatedStorage.Data.DataService (Direct Client Profile)
     pcall(function()
-        local dataFolder = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData")
-        if dataFolder then
-            for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped", "Team"}) do
-                local sub = dataFolder:FindFirstChild(folderName)
-                if sub and #sub:GetChildren() > 0 then
-                    foundInData = true
-                    for _, item in ipairs(sub:GetChildren()) do
-                        local attrR = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
-                        local rChild = item:FindFirstChild("Rarity") or item:FindFirstChild("Tier")
-                        local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
-                        addChar(item.Name, rVal)
+        local dataServMod = ReplicatedStorage:FindFirstChild("Data") and ReplicatedStorage.Data:FindFirstChild("DataService")
+        if dataServMod then
+            local ds = require(dataServMod)
+            local clientDS = (type(ds) == "table" and (ds.client or ds.Client or ds)) or nil
+            if clientDS and type(clientDS.get) == "function" then
+                local invData = clientDS:get({"Inventory"}) or clientDS:get({"Characters"}) or clientDS:get({"Hotbar"})
+                if type(invData) == "table" then
+                    for k, v in pairs(invData) do
+                        foundInService = true
+                        if type(v) == "table" then
+                            local cName = v.Name or v.CharacterName or v.Id or k
+                            local cRarity = v.Rarity or v.Tier
+                            local cUID = v.UUID or v.UID or tostring(k)
+                            addChar(cName, cRarity, cUID)
+                        elseif type(v) == "string" then
+                            addChar(v, nil, tostring(k))
+                        end
                     end
                 end
             end
         end
     end)
+
+    -- 2. Scan Data / PlayerData Folder on LocalPlayer
+    if not foundInService then
+        pcall(function()
+            local dataFolder = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData")
+            if dataFolder then
+                for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped", "Team"}) do
+                    local sub = dataFolder:FindFirstChild(folderName)
+                    if sub and #sub:GetChildren() > 0 then
+                        foundInService = true
+                        for _, item in ipairs(sub:GetChildren()) do
+                            local attrR = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
+                            local rChild = item:FindFirstChild("Rarity") or item:FindFirstChild("Tier")
+                            local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
+                            addChar(item.Name, rVal, item:GetAttribute("UUID") or item.Name)
+                        end
+                    end
+                end
+            end
+        end)
+    end
     
-    -- 2. Scan LocalPlayer Direct Folders
-    if not foundInData then
+    -- 3. Scan LocalPlayer Direct Folders
+    if not foundInService then
         pcall(function()
             for _, folderName in ipairs({"Inventory", "Characters", "Hotbar", "Units", "Equipped"}) do
                 local sub = LocalPlayer:FindFirstChild(folderName)
                 if sub and #sub:GetChildren() > 0 then
-                    foundInData = true
+                    foundInService = true
                     for _, item in ipairs(sub:GetChildren()) do
                         local attrR = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
                         local rChild = item:FindFirstChild("Rarity") or item:FindFirstChild("Tier")
                         local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
-                        addChar(item.Name, rVal)
+                        addChar(item.Name, rVal, item:GetAttribute("UUID") or item.Name)
                     end
                 end
             end
         end)
     end
 
-    -- 3. Scan Placed / Deployed Characters on Plot
+    -- 4. Scan Placed / Deployed Characters on Plot
     pcall(function()
         local plot = getMyPlot()
         if plot then
             for _, ch in ipairs(plot:GetChildren()) do
                 if ch:IsA("Model") and ch ~= LocalPlayer.Character and (ch:FindFirstChild("Humanoid") or ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChild("Head") or CharacterRarities[ch.Name:lower()]) then
-                    if not foundInData then
+                    if not foundInService then
                         local chRarity = ch:GetAttribute("Rarity") or ch:GetAttribute("Tier")
-                        addChar(ch.Name, chRarity)
+                        addChar(ch.Name, chRarity, ch:GetAttribute("UUID") or ch.Name)
                     end
                 end
             end
             local charFolder = plot:FindFirstChild("Characters") or plot:FindFirstChild("PlacedCharacters") or plot:FindFirstChild("Units")
             if charFolder then
                 for _, ch in ipairs(charFolder:GetChildren()) do
-                    if ch:IsA("Model") and not foundInData then
+                    if ch:IsA("Model") and not foundInService then
                         local chRarity = ch:GetAttribute("Rarity") or ch:GetAttribute("Tier")
-                        addChar(ch.Name, chRarity)
+                        addChar(ch.Name, chRarity, ch:GetAttribute("UUID") or ch.Name)
                     end
                 end
             end
         end
     end)
 
-    -- 4. Deep Scan PlayerGui Hotbar & Character Cards (Visual Ground Truth)
+    -- 5. Scan PlayerGui Animes Inventory & Hotbar (Direct Ground Truth)
     if totalChars == 0 then
         pcall(function()
             local pGui = LocalPlayer:FindFirstChild("PlayerGui")
@@ -2417,7 +2454,8 @@ local function scanPlayerCharacterInventory()
                                     for charKey, rVal in pairs(CharacterRarities) do
                                         if txtLower == charKey or txtLower:find(charKey, 1, true) then
                                             local explicitR = desc:GetAttribute("Rarity") or (desc.Parent and desc.Parent:GetAttribute("Rarity"))
-                                            addChar(txtLower, explicitR or rVal)
+                                            local cardUID = (desc.Parent and desc.Parent:GetFullName()) or desc:GetFullName()
+                                            addChar(txtLower, explicitR or rVal, cardUID)
                                             break
                                         end
                                     end

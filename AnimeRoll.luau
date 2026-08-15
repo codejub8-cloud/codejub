@@ -1593,7 +1593,7 @@ local InGameRarities = {
 local Config = {
     -- Gacha & Auto Roll
     AutoRoll            = false,
-    RollDelay           = 2.00,
+    RollDelay           = 2.20,
     
     -- Smart Auto Buy by Rarity
     AutoBuyByRarity     = false,
@@ -1894,7 +1894,7 @@ local Window = Cupie:CreateWindow({
 })
 
 -- ══════════════════════════════════════════════════════════
--- TAB 1: 📊 DASHBOARD & STATS (ภาพรวมไอดี & ควบคุมระบบหลัก)
+-- TAB 1: 📊 DASHBOARD & STATS (หน้าแสดงข้อมูลไอดี & สถานะระบบ - ไม่มีปุ่ม)
 -- ══════════════════════════════════════════════════════════
 local DashTab = Window:CreateTab("Stats", 1)
 DashTab:CreateHeader("Player Account & Wallet", 1)
@@ -1905,27 +1905,36 @@ local walletPara = DashTab:CreateParagraph({
     LayoutOrder = 2
 })
 
-DashTab:CreateHeader("Plot & Team Status", 3)
+DashTab:CreateHeader("Plot & Deployed Team", 3)
 
 local plotPara = DashTab:CreateParagraph({
-    Title = "📍 Plot Info",
-    Content = "Scanning player plot...",
+    Title = "📍 Plot & Team Status",
+    Content = "Scanning plot & equipped team...",
     LayoutOrder = 4
 })
 
-DashTab:CreateHeader("15 In-Game Rarity Tiers", 5)
+local teamPara = DashTab:CreateParagraph({
+    Title = "👥 Equipped Characters & Damage",
+    Content = "Scanning active units in battle...",
+    LayoutOrder = 5
+})
+
+DashTab:CreateHeader("15 In-Game Rarity Hierarchy", 6)
 
 local raritiesSummary = DashTab:CreateParagraph({
-    Title = "👑 Exact 15 Rarities In-Game",
-    Content = "Scanning rarity progression...",
-    LayoutOrder = 6
+    Title = "👑 In-Game Rarity Progression",
+    Content = "15. 💖 Limited   14. 👾 INVASION   13. 💎 OG   12. 💥 OP\n" ..
+        "11. 🔥 Immortal   10. 👑 Divine   9. 🔮 Secret   8. 💫 Godlyx\n" ..
+        "7. ⚡ Godly   6. ✨ God   5. 🔴 Mythic   4. 🟡 Legendary\n" ..
+        "3. 🟣 Epic   2. 🟢 Rare   1. ⚪ Common",
+    LayoutOrder = 7
 })
 
 -- Live Stats Updater Loop
 task.spawn(function()
     local startTime = os.time()
     while true do
-        task.wait(1.5)
+        task.wait(1.2)
         pcall(function()
             local ls = LocalPlayer:FindFirstChild("leaderstats")
             local goldVal = ls and (ls:FindFirstChild("Gold") or ls:FindFirstChild("Coins") or ls:FindFirstChild("Money"))
@@ -1950,23 +1959,30 @@ task.spawn(function()
             local totalPlots = Workspace:FindFirstChild("Plots") and #Workspace.Plots:GetChildren() or 0
             
             plotPara.Title = string.format("📍 Assigned: %s (Total Server Plots: %d)", plotName, totalPlots)
-            plotPara.Content = string.format("🎯 Status: EquipBest [%s]  |  Upgrade [%s]  |  Evolve [%s]  |  Stats [%s]", 
+            plotPara.Content = string.format("⚙️ Live Systems: EquipBest [%s] | LevelUp [%s] | Evolve [%s] | AutoFight [%s]", 
                 Config.AutoEquipBest and "ON" or "OFF",
                 Config.AutoLevelUp and "ON" or "OFF",
                 Config.AutoEvolve and "ON" or "OFF",
-                Config.AutoUpgradeStats and "ON" or "OFF"
+                Config.AutoFight and "ON" or "OFF"
             )
-            
-            raritiesSummary.Title = "👑 15 In-Game Rarity Hierarchy"
-            raritiesSummary.Content = "15. 💖 Limited   14. 👾 INVASION   13. 💎 OG   12. 💥 OP\n" ..
-                "11. 🔥 Immortal   10. 👑 Divine   9. 🔮 Secret   8. 💫 Godlyx\n" ..
-                "7. ⚡ Godly   6. ✨ God   5. 🔴 Mythic   4. 🟡 Legendary\n" ..
-                "3. 🟣 Epic   2. 🟢 Rare   1. ⚪ Common"
+
+            -- Scan Deployed Characters from Plot
+            local deployedCount = 0
+            local unitNames = {}
+            if plot and plot:FindFirstChild("PlacedCharacters") then
+                for _, ch in ipairs(plot.PlacedCharacters:GetChildren()) do
+                    deployedCount = deployedCount + 1
+                    table.insert(unitNames, ch.Name)
+                end
+            end
+
+            teamPara.Title = string.format("👥 Deployed Team (%d Units on Field)", deployedCount)
+            teamPara.Content = (deployedCount > 0) 
+                and ("Active Units: " .. table.concat(unitNames, ", "))
+                or "No units deployed currently. (Turn on Auto Equip Best in Upgrades)"
         end)
     end
 end)
-
-
 
 -- ══════════════════════════════════════════════════════════
 -- TAB 2: 🎰 GACHA & SUMMON ENGINE (ระบบสุ่ม & ซื้อ/ขาย/ล็อคตามระดับ)
@@ -2015,7 +2031,7 @@ GachaTab:CreateSlider({
     Description = "Interval between each roll attempt (seconds, min 2.0s)",
     Min = 2.00,
     Max = 10.00,
-    Default = 2.00,
+    Default = 2.20,
     Step = 0.05,
     Decimals = 2,
     Suffix = "s",

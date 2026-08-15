@@ -2140,6 +2140,113 @@ end)
 -- ══════════════════════════════════════════════════════════
 
 -- ══════════════════════════════════════════════════════════
+
+-- Fast Number Formatting (e.g. 1,250,000)
+local function formatNumberWithCommas(amount)
+    local formatted = tostring(amount or "0"):gsub("[^%d]", "")
+    if formatted == "" then formatted = "0" end
+    local k
+    while true do
+        formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
+        if k == 0 then break end
+    end
+    return formatted
+end
+
+-- Fast Direct Currency Scanner (Instant O(1))
+local function getPlayerCurrencies()
+    local gold = nil
+    local gems = nil
+    local wins = nil
+    
+    -- 1. Direct Leaderstats check
+    local ls = LocalPlayer:FindFirstChild("leaderstats")
+    if ls then
+        for _, child in ipairs(ls:GetChildren()) do
+            local n = child.Name:lower()
+            local val = tostring(child.Value or (child:IsA("ValueBase") and child.Value) or "")
+            if val ~= "" and val ~= "nil" then
+                if n:find("gold") or n:find("coin") or n:find("money") or n:find("cash") then
+                    gold = val
+                elseif n:find("gem") or n:find("diamond") then
+                    gems = val
+                elseif n:find("win") or n:find("level") or n:find("stage") or n:find("wave") then
+                    wins = val
+                end
+            end
+        end
+    end
+    
+    -- 2. Direct Player Attributes check
+    if not gold or not gems or not wins then
+        local attrs = LocalPlayer:GetAttributes()
+        for k, v in pairs(attrs) do
+            local n = tostring(k):lower()
+            local val = tostring(v)
+            if val ~= "" and val ~= "nil" then
+                if not gold and (n:find("gold") or n:find("coin") or n:find("money") or n:find("cash")) then
+                    gold = val
+                elseif not gems and (n:find("gem") or n:find("diamond")) then
+                    gems = val
+                elseif not wins and (n:find("win") or n:find("level") or n:find("stage") or n:find("wave")) then
+                    wins = val
+                end
+            end
+        end
+    end
+    
+    -- 3. Direct Data / PlayerData folder check
+    if not gold or not gems or not wins then
+        local df = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData") or LocalPlayer:FindFirstChild("Stats")
+        if df then
+            for _, child in ipairs(df:GetChildren()) do
+                local n = child.Name:lower()
+                local val = tostring(child.Value or (child:IsA("ValueBase") and child.Value) or "")
+                if val ~= "" and val ~= "nil" then
+                    if not gold and (n:find("gold") or n:find("coin") or n:find("money") or n:find("cash")) then
+                        gold = val
+                    elseif not gems and (n:find("gem") or n:find("diamond")) then
+                        gems = val
+                    elseif not wins and (n:find("win") or n:find("level") or n:find("stage") or n:find("wave")) then
+                        wins = val
+                    end
+                end
+            end
+            for k, v in pairs(df:GetAttributes()) do
+                local n = tostring(k):lower()
+                local val = tostring(v)
+                if not gold and (n:find("gold") or n:find("coin") or n:find("money")) then gold = val
+                elseif not gems and (n:find("gem") or n:find("diamond")) then gems = val
+                elseif not wins and (n:find("win") or n:find("level") or n:find("stage")) then wins = val
+                end
+            end
+        end
+    end
+
+    -- 4. Direct Fast UI Checks
+    if not gold or gold == "0" then
+        local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if pGui then
+            local mainGui = pGui:FindFirstChild("MainGui") or pGui:FindFirstChild("ScreenGui") or pGui:FindFirstChild("HUD") or pGui:FindFirstChild("Main")
+            if mainGui then
+                for _, ch in ipairs(mainGui:GetChildren()) do
+                    if ch:IsA("Frame") or ch:IsA("TextLabel") then
+                        local n = ch.Name:lower()
+                        if ch:IsA("TextLabel") and ch.Text:match("%d") then
+                            if n:find("gold") or n:find("coin") then gold = ch.Text end
+                            if n:find("gem") or n:find("diamond") then gems = ch.Text end
+                            if n:find("win") or n:find("level") then wins = ch.Text end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    return tostring(gold or "0"), tostring(gems or "0"), tostring(wins or "0")
+end
+
+
 -- PURE DATA-DRIVEN INVENTORY SCANNER (ZERO FALSE POSITIVES)
 -- ══════════════════════════════════════════════════════════
 

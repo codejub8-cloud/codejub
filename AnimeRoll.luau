@@ -2089,11 +2089,46 @@ local invRarityPara = DashTab:CreateParagraph({
     LayoutOrder = 6
 })
 
--- Number formatting with commas (e.g. 1,000,000)
+-- ══════════════════════════════════════════════════════════
+-- INSTANT REAL-TIME STATS & INVENTORY ENGINE (ZERO-LAG)
+-- ══════════════════════════════════════════════════════════
+
+-- Known Character Rarity Dictionary (Instant O(1) Lookup, No require hang)
+local CharacterRarities = {
+    -- Common (Tier 1)
+    ["luffy"] = "Common", ["zoro"] = "Common", ["sanji"] = "Common", ["nami"] = "Common",
+    ["usopp"] = "Common", ["chopper"] = "Common", ["naruto"] = "Common", ["sasuke"] = "Common",
+    ["sakura"] = "Common", ["ichigo"] = "Common", ["rukia"] = "Common", ["goku"] = "Common",
+    ["vegeta"] = "Common", ["krillin"] = "Common", ["tanjiro"] = "Common", ["nezuko"] = "Common",
+    ["zenitsu"] = "Common", ["inosuke"] = "Common", ["mob"] = "Common", ["reigen"] = "Common",
+    ["rock lee"] = "Common", ["rocklee"] = "Common", ["shinra"] = "Common", ["erwin"] = "Common",
+
+    -- Rare (Tier 2)
+    ["ace"] = "Rare", ["sabo"] = "Rare", ["law"] = "Rare", ["kid"] = "Rare",
+    ["kakashi"] = "Rare", ["gaara"] = "Rare", ["itachi"] = "Rare", ["renji"] = "Rare",
+    ["byakuya"] = "Rare", ["piccolo"] = "Rare", ["gohan"] = "Rare", ["trunks"] = "Rare",
+    ["rengoku"] = "Rare", ["tomioka"] = "Rare", ["shinobu"] = "Rare", ["maki"] = "Rare",
+    ["megumi"] = "Rare", ["nobara"] = "Rare", ["todo"] = "Rare", ["choso"] = "Rare",
+
+    -- Epic (Tier 3)
+    ["whitebeard"] = "Epic", ["blackbeard"] = "Epic", ["shanks"] = "Epic", ["mihawk"] = "Epic",
+    ["minato"] = "Epic", ["jiraiya"] = "Epic", ["tsunade"] = "Epic", ["orochimaru"] = "Epic",
+    ["aizen"] = "Epic", ["kenpachi"] = "Epic", ["hitsugaya"] = "Epic", ["frieza"] = "Epic",
+    ["cell"] = "Epic", ["buu"] = "Epic", ["akaza"] = "Epic", ["douma"] = "Epic",
+    ["kokushibo"] = "Epic", ["sukuna"] = "Epic", ["gojo"] = "Epic", ["geto"] = "Epic",
+    ["toji"] = "Epic", ["yuta"] = "Epic", ["saitama"] = "Epic", ["genos"] = "Epic",
+
+    -- Legendary (Tier 4)
+    ["roger"] = "Legendary", ["kaido"] = "Legendary", ["bigmom"] = "Legendary", ["garp"] = "Legendary",
+    ["madara"] = "Legendary", ["hashirama"] = "Legendary", ["obito"] = "Legendary", ["pain"] = "Legendary",
+    ["yamamoto"] = "Legendary", ["yhwach"] = "Legendary", ["beerus"] = "Legendary", ["whis"] = "Legendary",
+    ["muzan"] = "Legendary", ["yoruichi"] = "Legendary", ["boros"] = "Legendary", ["garou"] = "Legendary"
+}
+
+-- Fast Number Formatting (e.g. 1,250,000)
 local function formatNumberWithCommas(amount)
-    local formatted = tostring(amount)
-    local num = tonumber(formatted:gsub("[^%d]", ""))
-    if not num then return formatted end
+    local formatted = tostring(amount or "0"):gsub("[^%d]", "")
+    if formatted == "" then formatted = "0" end
     local k
     while true do
         formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
@@ -2102,39 +2137,55 @@ local function formatNumberWithCommas(amount)
     return formatted
 end
 
--- Comprehensive Currency Scanner (Leaderstats, Attributes, Data, PlayerGui)
+-- Fast Direct Currency Scanner (Instant O(1), No Descendants Traverse)
 local function getPlayerCurrencies()
     local gold = nil
     local gems = nil
     local wins = nil
     
-    -- 1. Check Leaderstats
-    pcall(function()
-        local ls = LocalPlayer:FindFirstChild("leaderstats")
-        if ls then
-            for _, child in ipairs(ls:GetChildren()) do
-                local n = child.Name:lower()
-                local val = tostring(child.Value or (child:IsA("ValueBase") and child.Value) or "")
-                if val ~= "" and val ~= "nil" then
-                    if n:find("gold") or n:find("coin") or n:find("money") or n:find("cash") then
-                        gold = val
-                    elseif n:find("gem") or n:find("diamond") then
-                        gems = val
-                    elseif n:find("win") or n:find("level") or n:find("stage") or n:find("wave") then
-                        wins = val
-                    end
+    -- 1. Direct Leaderstats check
+    local ls = LocalPlayer:FindFirstChild("leaderstats")
+    if ls then
+        for _, child in ipairs(ls:GetChildren()) do
+            local n = child.Name:lower()
+            local val = tostring(child.Value or (child:IsA("ValueBase") and child.Value) or "")
+            if val ~= "" and val ~= "nil" then
+                if n:find("gold") or n:find("coin") or n:find("money") or n:find("cash") then
+                    gold = val
+                elseif n:find("gem") or n:find("diamond") then
+                    gems = val
+                elseif n:find("win") or n:find("level") or n:find("stage") or n:find("wave") then
+                    wins = val
                 end
             end
         end
-    end)
+    end
     
-    -- 2. Check Player Attributes
-    pcall(function()
-        if not gold or not gems or not wins then
-            local attrs = LocalPlayer:GetAttributes()
-            for k, v in pairs(attrs) do
-                local n = tostring(k):lower()
-                local val = tostring(v)
+    -- 2. Direct Player Attributes check
+    if not gold or not gems or not wins then
+        local attrs = LocalPlayer:GetAttributes()
+        for k, v in pairs(attrs) do
+            local n = tostring(k):lower()
+            local val = tostring(v)
+            if val ~= "" and val ~= "nil" then
+                if not gold and (n:find("gold") or n:find("coin") or n:find("money") or n:find("cash")) then
+                    gold = val
+                elseif not gems and (n:find("gem") or n:find("diamond")) then
+                    gems = val
+                elseif not wins and (n:find("win") or n:find("level") or n:find("stage") or n:find("wave")) then
+                    wins = val
+                end
+            end
+        end
+    end
+    
+    -- 3. Direct Data / PlayerData folder check
+    if not gold or not gems or not wins then
+        local df = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData") or LocalPlayer:FindFirstChild("Stats")
+        if df then
+            for _, child in ipairs(df:GetChildren()) do
+                local n = child.Name:lower()
+                local val = tostring(child.Value or (child:IsA("ValueBase") and child.Value) or "")
                 if val ~= "" and val ~= "nil" then
                     if not gold and (n:find("gold") or n:find("coin") or n:find("money") or n:find("cash")) then
                         gold = val
@@ -2145,71 +2196,41 @@ local function getPlayerCurrencies()
                     end
                 end
             end
-        end
-    end)
-    
-    -- 3. Check Data Folder
-    pcall(function()
-        if not gold or not gems or not wins then
-            local df = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData") or LocalPlayer:FindFirstChild("Stats")
-            if df then
-                for _, child in ipairs(df:GetChildren()) do
-                    local n = child.Name:lower()
-                    local val = tostring(child.Value or (child:IsA("ValueBase") and child.Value) or "")
-                    if val ~= "" and val ~= "nil" then
-                        if not gold and (n:find("gold") or n:find("coin") or n:find("money") or n:find("cash")) then
-                            gold = val
-                        elseif not gems and (n:find("gem") or n:find("diamond")) then
-                            gems = val
-                        elseif not wins and (n:find("win") or n:find("level") or n:find("stage") or n:find("wave")) then
-                            wins = val
-                        end
-                    end
-                end
-                for k, v in pairs(df:GetAttributes()) do
-                    local n = tostring(k):lower()
-                    local val = tostring(v)
-                    if not gold and (n:find("gold") or n:find("coin") or n:find("money")) then gold = val
-                    elseif not gems and (n:find("gem") or n:find("diamond")) then gems = val
-                    elseif not wins and (n:find("win") or n:find("level") or n:find("stage")) then wins = val
-                    end
+            for k, v in pairs(df:GetAttributes()) do
+                local n = tostring(k):lower()
+                local val = tostring(v)
+                if not gold and (n:find("gold") or n:find("coin") or n:find("money")) then gold = val
+                elseif not gems and (n:find("gem") or n:find("diamond")) then gems = val
+                elseif not wins and (n:find("win") or n:find("level") or n:find("stage")) then wins = val
                 end
             end
         end
-    end)
-    
-    -- 4. Check PlayerGui HUD as visual fallback
-    pcall(function()
-        if not gold or gold == "0" then
-            local pGui = LocalPlayer:FindFirstChild("PlayerGui")
-            if pGui then
-                for _, desc in ipairs(pGui:GetDescendants()) do
-                    if desc:IsA("TextLabel") and desc.Visible then
-                        local text = desc.Text
-                        local textLower = text:lower()
-                        local parentName = (desc.Parent and desc.Parent.Name:lower()) or ""
-                        local nameLower = desc.Name:lower()
-                        
-                        if (nameLower:find("gold") or parentName:find("gold") or parentName:find("coin")) and text:match("%d") then
-                            local numStr = text:gsub("[^%d,.]", "")
-                            if numStr ~= "" and not gold then gold = numStr end
-                        elseif (nameLower:find("gem") or parentName:find("gem") or parentName:find("diamond")) and text:match("%d") then
-                            local numStr = text:gsub("[^%d,.]", "")
-                            if numStr ~= "" and not gems then gems = numStr end
-                        elseif (nameLower:find("win") or parentName:find("win") or nameLower:find("stage")) and text:match("%d") then
-                            local numStr = text:gsub("[^%d,.]", "")
-                            if numStr ~= "" and not wins then wins = numStr end
+    end
+
+    -- 4. Direct Fast UI Checks (Specific known HUD frames only)
+    if not gold or gold == "0" then
+        local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if pGui then
+            local mainGui = pGui:FindFirstChild("MainGui") or pGui:FindFirstChild("ScreenGui") or pGui:FindFirstChild("HUD") or pGui:FindFirstChild("Main")
+            if mainGui then
+                for _, ch in ipairs(mainGui:GetChildren()) do
+                    if ch:IsA("Frame") or ch:IsA("TextLabel") then
+                        local n = ch.Name:lower()
+                        if ch:IsA("TextLabel") and ch.Text:match("%d") then
+                            if n:find("gold") or n:find("coin") then gold = ch.Text end
+                            if n:find("gem") or n:find("diamond") then gems = ch.Text end
+                            if n:find("win") or n:find("level") then wins = ch.Text end
                         end
                     end
                 end
             end
         end
-    end)
+    end
     
     return tostring(gold or "0"), tostring(gems or "0"), tostring(wins or "0")
 end
 
--- Scan Owned Characters & Count by Rarity
+-- Fast Direct Character Inventory Scanner (Instant O(N), No hanging requires)
 local function scanPlayerCharacterInventory()
     local rarityCounts = {
         ["Limited"]   = 0,
@@ -2230,159 +2251,136 @@ local function scanPlayerCharacterInventory()
     }
     local totalChars = 0
     
-    -- 1. Try require CharactersInfo module if available
-    local charRarityMap = {}
-    pcall(function()
-        local cInfoMod = ReplicatedStorage:FindFirstChild("Modules") 
-            and ReplicatedStorage.Modules:FindFirstChild("Characters") 
-            and ReplicatedStorage.Modules.Characters:FindFirstChild("CharactersInfo")
-        if cInfoMod then
-            local info = require(cInfoMod)
-            if info and info.Characters then
-                for cName, cData in pairs(info.Characters) do
-                    if cData and cData.Rarity then
-                        charRarityMap[tostring(cName):lower()] = cData.Rarity
-                    end
-                end
-            end
-        end
-    end)
-    
-    -- 2. Scan Data / Inventory Folder
+    -- Scan Data / Inventory Folder
     local invFolder = nil
-    pcall(function()
-        local dataFolder = LocalPlayer:FindFirstChild("Data")
-        if dataFolder then
-            invFolder = dataFolder:FindFirstChild("Inventory") or dataFolder:FindFirstChild("Characters")
-        end
-        if not invFolder then
-            invFolder = LocalPlayer:FindFirstChild("Inventory") or LocalPlayer:FindFirstChild("Characters")
-        end
-    end)
-    
-    if invFolder then
-        pcall(function()
-            for _, item in ipairs(invFolder:GetChildren()) do
-                totalChars = totalChars + 1
-                local rStr = nil
-                
-                pcall(function()
-                    local attrRarity = item:GetAttribute("Rarity")
-                    if attrRarity and type(attrRarity) == "string" then
-                        rStr = attrRarity
-                    else
-                        local rarityChild = item:FindFirstChild("Rarity")
-                        if rarityChild and rarityChild:IsA("ValueBase") then
-                            rStr = tostring(rarityChild.Value)
-                        end
-                    end
-                end)
-                
-                if not rStr then
-                    local itemNameLower = item.Name:lower()
-                    rStr = charRarityMap[itemNameLower]
-                end
-                
-                if rStr and rarityCounts[rStr] then
-                    rarityCounts[rStr] = rarityCounts[rStr] + 1
-                else
-                    for rarityName in pairs(rarityCounts) do
-                        if item.Name:lower():find(rarityName:lower()) then
-                            rarityCounts[rarityName] = rarityCounts[rarityName] + 1
-                            break
-                        end
-                    end
-                end
-            end
-        end)
+    local dataFolder = LocalPlayer:FindFirstChild("Data")
+    if dataFolder then
+        invFolder = dataFolder:FindFirstChild("Inventory") or dataFolder:FindFirstChild("Characters")
+    end
+    if not invFolder then
+        invFolder = LocalPlayer:FindFirstChild("Inventory") or LocalPlayer:FindFirstChild("Characters")
     end
     
-    -- 3. Also scan PlacedCharacters on plot
-    pcall(function()
-        local plot = getMyPlot()
-        if plot and plot:FindFirstChild("PlacedCharacters") then
-            for _, ch in ipairs(plot.PlacedCharacters:GetChildren()) do
-                local chRarity = nil
-                pcall(function() chRarity = ch:GetAttribute("Rarity") end)
-                if not chRarity then
-                    chRarity = charRarityMap[ch.Name:lower()]
+    if invFolder then
+        for _, item in ipairs(invFolder:GetChildren()) do
+            totalChars = totalChars + 1
+            local rStr = nil
+            
+            local attrRarity = item:GetAttribute("Rarity")
+            if attrRarity and type(attrRarity) == "string" then
+                rStr = attrRarity
+            else
+                local rarityChild = item:FindFirstChild("Rarity")
+                if rarityChild and rarityChild:IsA("ValueBase") then
+                    rStr = tostring(rarityChild.Value)
                 end
-                if chRarity and rarityCounts[chRarity] then
-                    if not invFolder then
-                        totalChars = totalChars + 1
-                        rarityCounts[chRarity] = rarityCounts[chRarity] + 1
+            end
+            
+            if not rStr then
+                local itemNameLower = item.Name:lower()
+                rStr = CharacterRarities[itemNameLower]
+            end
+            
+            if rStr and rarityCounts[rStr] then
+                rarityCounts[rStr] = rarityCounts[rStr] + 1
+            else
+                local matched = false
+                for rarityName in pairs(rarityCounts) do
+                    if item.Name:lower():find(rarityName:lower()) then
+                        rarityCounts[rarityName] = rarityCounts[rarityName] + 1
+                        matched = true
+                        break
                     end
+                end
+                if not matched then
+                    rarityCounts["Common"] = rarityCounts["Common"] + 1
                 end
             end
         end
-    end)
+    end
+    
+    -- Also scan PlacedCharacters on plot
+    local plot = getMyPlot()
+    if plot and plot:FindFirstChild("PlacedCharacters") then
+        for _, ch in ipairs(plot.PlacedCharacters:GetChildren()) do
+            local chRarity = ch:GetAttribute("Rarity") or CharacterRarities[ch.Name:lower()]
+            if chRarity and rarityCounts[chRarity] then
+                if not invFolder then
+                    totalChars = totalChars + 1
+                    rarityCounts[chRarity] = rarityCounts[chRarity] + 1
+                end
+            end
+        end
+    end
     
     return rarityCounts, totalChars
 end
 
 -- Live Stats Updater Loop
 local function updateDashboardStats(startTime)
-    pcall(function()
-        local goldStr, gemsStr, winsStr = getPlayerCurrencies()
-        local elapsed = os.time() - (startTime or os.time())
-        local hrs = math.floor(elapsed / 3600)
-        local mins = math.floor((elapsed % 3600) / 60)
-        local secs = elapsed % 60
-        local timeStr = string.format("%02d:%02d:%02d", hrs, mins, secs)
-        
-        local formattedGold = formatNumberWithCommas(goldStr or "0")
-        
-        -- 1. Prominent Gold Display Card
-        if goldPara then
-            goldPara:SetTitle("GOLD: " .. formattedGold)
-            goldPara:SetContent("Current Balance: " .. formattedGold .. " Gold Coins")
-        end
-        
-        -- 2. Other Currencies Card
-        if curPara then
-            local dName = (LocalPlayer and LocalPlayer.DisplayName) or "Player"
-            local uName = (LocalPlayer and LocalPlayer.Name) or "User"
-            curPara:SetTitle(dName .. " (@" .. uName .. ")")
-            curPara:SetContent(string.format(
-                "• Gems (Diamonds) : %s\n" ..
-                "• Wins / Level    : %s\n" ..
-                "• Farm Duration   : %s",
-                formatNumberWithCommas(gemsStr or "0"),
-                tostring(winsStr or "0"),
-                tostring(timeStr)
-            ))
-        end
-        
-        -- 3. Characters Count by Rarity
-        if invRarityPara then
-            local rCounts, totalCount = scanPlayerCharacterInventory()
-            rCounts = rCounts or {}
-            totalCount = totalCount or 0
-            invRarityPara:SetTitle(string.format("Owned Characters (%d Total)", totalCount))
-            invRarityPara:SetContent(string.format(
-                "• Limited   : %d  |  INVASION : %d  |  OG       : %d\n" ..
-                "• OP        : %d  |  Immortal : %d  |  Divine   : %d\n" ..
-                "• Secret    : %d  |  Godlyx   : %d  |  Godly    : %d\n" ..
-                "• God       : %d  |  Mythic   : %d  |  Legendary: %d\n" ..
-                "• Epic      : %d  |  Rare     : %d  |  Common   : %d",
-                rCounts["Limited"] or 0, rCounts["INVASION"] or 0, rCounts["OG"] or 0,
-                rCounts["OP"] or 0, rCounts["Immortal"] or 0, rCounts["Divine"] or 0,
-                rCounts["Secret"] or 0, rCounts["Godlyx"] or 0, rCounts["Godly"] or 0,
-                rCounts["God"] or 0, rCounts["Mythic"] or 0, rCounts["Legendary"] or 0,
-                rCounts["Epic"] or 0, rCounts["Rare"] or 0, rCounts["Common"] or 0
-            ))
-        end
-    end)
+    local goldStr, gemsStr, winsStr = getPlayerCurrencies()
+    local elapsed = os.time() - (startTime or os.time())
+    local hrs = math.floor(elapsed / 3600)
+    local mins = math.floor((elapsed % 3600) / 60)
+    local secs = elapsed % 60
+    local timeStr = string.format("%02d:%02d:%02d", hrs, mins, secs)
+    
+    local formattedGold = formatNumberWithCommas(goldStr or "0")
+    
+    -- 1. Prominent Gold Display Card
+    if goldPara then
+        goldPara:SetTitle("GOLD: " .. formattedGold)
+        goldPara:SetContent("Current Available Balance: " .. formattedGold .. " Gold Coins")
+    end
+    
+    -- 2. Other Currencies Card
+    if curPara then
+        local dName = (LocalPlayer and LocalPlayer.DisplayName) or "Player"
+        local uName = (LocalPlayer and LocalPlayer.Name) or "User"
+        curPara:SetTitle(dName .. " (@" .. uName .. ")")
+        curPara:SetContent(string.format(
+            "• Gems (Diamonds) : %s\n" ..
+            "• Wins / Level    : %s\n" ..
+            "• Farm Duration   : %s",
+            formatNumberWithCommas(gemsStr or "0"),
+            tostring(winsStr or "0"),
+            tostring(timeStr)
+        ))
+    end
+    
+    -- 3. Characters Count by Rarity
+    if invRarityPara then
+        local rCounts, totalCount = scanPlayerCharacterInventory()
+        rCounts = rCounts or {}
+        totalCount = totalCount or 0
+        invRarityPara:SetTitle(string.format("Owned Characters (%d Total)", totalCount))
+        invRarityPara:SetContent(string.format(
+            "• Limited   : %d  |  INVASION : %d  |  OG       : %d\n" ..
+            "• OP        : %d  |  Immortal : %d  |  Divine   : %d\n" ..
+            "• Secret    : %d  |  Godlyx   : %d  |  Godly    : %d\n" ..
+            "• God       : %d  |  Mythic   : %d  |  Legendary: %d\n" ..
+            "• Epic      : %d  |  Rare     : %d  |  Common   : %d",
+            rCounts["Limited"] or 0, rCounts["INVASION"] or 0, rCounts["OG"] or 0,
+            rCounts["OP"] or 0, rCounts["Immortal"] or 0, rCounts["Divine"] or 0,
+            rCounts["Secret"] or 0, rCounts["Godlyx"] or 0, rCounts["Godly"] or 0,
+            rCounts["God"] or 0, rCounts["Mythic"] or 0, rCounts["Legendary"] or 0,
+            rCounts["Epic"] or 0, rCounts["Rare"] or 0, rCounts["Common"] or 0
+        ))
+    end
 end
 
+-- Run immediate first update + continuous 1-second refresh
 task.spawn(function()
     local startTime = os.time()
     updateDashboardStats(startTime)
     while true do
         task.wait(1.0)
-        updateDashboardStats(startTime)
+        pcall(function()
+            updateDashboardStats(startTime)
+        end)
     end
 end)
+
 
 -- TAB 2: GACHA & SUMMON ENGINE (ระบบสุ่ม & ซื้อ/ขาย/ล็อคตามระดับ)
 -- ══════════════════════════════════════════════════════════

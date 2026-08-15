@@ -1487,13 +1487,14 @@ end
 
 --// ══════════════════════════════════════════════════════════
 --// GAME AUTOMATION & REMOTE ENGINE (ROLL ANIME TO FIGHT)
+--// Meticulously fine-tuned from Live Spy Logs & Full Dumps
 --// ══════════════════════════════════════════════════════════
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace         = game:GetService("Workspace")
 local VirtualUser       = game:GetService("VirtualUser")
 
--- Safe Remote Cache
+-- Safe Remote & Module Cache
 local Remotes           = ReplicatedStorage:WaitForChild("Remotes", 5)
 local Modules           = ReplicatedStorage:WaitForChild("Modules", 5)
 
@@ -1504,8 +1505,11 @@ local CharactersBuy     = CharactersFolder and CharactersFolder:FindFirstChild("
 local CharactersSell    = CharactersFolder and CharactersFolder:FindFirstChild("Sell")
 local CharactersInv     = CharactersFolder and CharactersFolder:FindFirstChild("UpdateInventory")
 local CharactersLevelUp = CharactersFolder and CharactersFolder:FindFirstChild("LevelUp")
+
+-- Stats & Stat Upgrades (Verified from foranimell.lua)
 local GeneralUpgrade    = Remotes and Remotes:FindFirstChild("Upgrade")
 
+-- Lucky Wheel
 local SpinRemote        = Remotes and Remotes:FindFirstChild("SpinWheel") and Remotes.SpinWheel:FindFirstChild("Spin")
 
 -- Combat Remotes
@@ -1521,6 +1525,17 @@ local FlexKill          = FlexFolder and FlexFolder:FindFirstChild("KillCharacte
 local FlexSetState      = FlexFolder and FlexFolder:FindFirstChild("SetFlexState")
 local FlexLock          = FlexFolder and FlexFolder:FindFirstChild("UpdateCharacterLock")
 local FlexHotbar        = FlexFolder and FlexFolder:FindFirstChild("UpdateInventoryHotbar")
+
+-- NPCs, Factions & Tickets (Verified from foranimel.lua)
+local NPCEvents         = Remotes and Remotes:FindFirstChild("NPCEvents")
+local TalkTicketsRemote = NPCEvents and NPCEvents:FindFirstChild("TalkTickets")
+
+local FactionMod        = Modules and Modules:FindFirstChild("Shared") and Modules.Shared:FindFirstChild("Faction")
+local FactionUpdate     = FactionMod and FactionMod:FindFirstChild("FactionUpdate")
+
+local TutorialMod       = Modules and Modules:FindFirstChild("Tutorial")
+local TutorialReward    = TutorialMod and TutorialMod:FindFirstChild("TutorialReward")
+local TutorialDone      = TutorialMod and TutorialMod:FindFirstChild("TutorialDone")
 
 local EvolutionRemote   = Remotes and Remotes:FindFirstChild("EvolutionRemotes") and Remotes.EvolutionRemotes:FindFirstChild("Evolve")
 local TraitRemote       = Remotes and Remotes:FindFirstChild("Trait") and Remotes.Trait:FindFirstChild("Request")
@@ -1559,22 +1574,6 @@ local InGameRarities = {
     [15] = "Limited"
 }
 
-local RarityRank = {}
-for rank, name in pairs(InGameRarities) do
-    RarityRank[name] = rank
-    RarityRank[name:lower()] = rank
-end
-
-local function getRankFromRarityName(name)
-    if not name then return 1 end
-    for rank, rName in pairs(InGameRarities) do
-        if name:lower():find(rName:lower()) then
-            return rank
-        end
-    end
-    return 1
-end
-
 -- Systematic Configuration State
 local Config = {
     -- Gacha & Auto Roll
@@ -1588,11 +1587,11 @@ local Config = {
     
     -- Auto Sell Rarity Selection
     AutoSellLowTier     = false,
-    SellThreshold       = "Common Only", -- "Common Only", "Up to Rare", "Up to Epic", "Up to Legendary"
+    SellThreshold       = "Common Only",
     
     -- Auto Lock Rarity Selection
     AutoLockRareUnits   = true,
-    LockMinRarity       = "Legendary & Above", -- "Legendary & Above", "Mythic & Above", "God & Above", "Secret & Above", etc.
+    LockMinRarity       = "Legendary & Above",
     
     -- Target Stop Filter
     TargetRarityFilter  = false,
@@ -1602,11 +1601,20 @@ local Config = {
     AutoSpinWheel       = false,
     HideNotifications   = true,
     
-    -- Dashboard & Progression Toggles
+    -- Dashboard & Progression Toggles (Equip, Level, Evolve, Stats)
     AutoEquipBest       = false,
     AutoLevelUp         = false,
     AutoEvolve          = false,
+    AutoUpgradeStats    = false,
+    AutoUpgradeLuck     = true,
+    AutoUpgradeInventory= true,
+    AutoUpgradeGold     = true,
+    AutoUpgradeSlots    = true,
     AutoTraitReroll     = false,
+    
+    -- Factions & NPC Tickets
+    AutoFactionQuests   = false,
+    AutoBuyNPCTickets   = false,
     
     -- Shop Direct
     AutoBuyTier         = false,
@@ -1691,7 +1699,7 @@ end)
 cleanAllExistingNotifications()
 
 -- ══════════════════════════════════════════════════════════
--- HELPER FUNCTIONS (Plot, In-Game Equip & Rarity Logic)
+-- HELPER FUNCTIONS (Plot, In-Game Equip & Remote Handlers)
 -- ══════════════════════════════════════════════════════════
 
 local function getMyPlot()
@@ -1746,37 +1754,16 @@ local function ensureSmoothPadPosition(padPart)
     end
 end
 
+-- Exact In-Game Equip Best (Verified: Characters.UpdateInventory:FireServer("EquipBest"))
 local function triggerEquipBest()
+    if CharactersInv then
+        pcall(function() CharactersInv:FireServer("EquipBest") end)
+    end
+    
     local plot = getMyPlot()
-    if not plot then return end
-    
-    local equipPrompt = plot:FindFirstChild("EquipPrompt", true) or plot:FindFirstChild("AutoEquipPrompt", true)
-    if equipPrompt then
-        firePrompt(equipPrompt)
-        return
-    end
-    
-    local pGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if pGui then
-        for _, desc in ipairs(pGui:GetDescendants()) do
-            if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and (desc.Name:lower():find("equipbest") or desc.Name:lower():find("autoequip")) then
-                pcall(function()
-                    for _, conn in ipairs(getconnections(desc.MouseButton1Click)) do
-                        conn:Fire()
-                    end
-                end)
-            end
-        end
-    end
-    
-    if plot:FindFirstChild("Placement") then
-        for _, slot in ipairs(plot.Placement:GetChildren()) do
-            local charModel = slot:FindFirstChild("Character") or slot:FindFirstChildWhichIsA("Model")
-            if charModel then
-                local prompt = charModel:FindFirstChild("PlacementPrompt") or charModel:FindFirstChildWhichIsA("ProximityPrompt", true)
-                if prompt then firePrompt(prompt) end
-            end
-        end
+    if plot then
+        local equipPrompt = plot:FindFirstChild("EquipPrompt", true) or plot:FindFirstChild("AutoEquipPrompt", true)
+        if equipPrompt then firePrompt(equipPrompt) end
     end
 end
 
@@ -1825,13 +1812,30 @@ local function executeSmartAutoBuy()
     end
 end
 
--- Execute Auto Lock by Selected Minimum Rarity
+-- Auto Lock by Selected Minimum Rarity (Verified: Flex.UpdateCharacterLock)
 local function executeAutoLockUnits()
     if not FlexLock then return end
     local minLockRank = getMinRankFromRule(Config.LockMinRarity)
     pcall(function()
         FlexLock:FireServer("AutoLock", minLockRank)
     end)
+end
+
+-- Auto Upgrade Stats Loop (Verified from foranimell.lua: Upgrade:FireServer("Gold", "Luck" / "Inventory" / "Gold" / "Slots"))
+local function executeStatUpgrades()
+    if not GeneralUpgrade then return end
+    if Config.AutoUpgradeLuck then
+        pcall(function() GeneralUpgrade:FireServer("Gold", "Luck") end)
+    end
+    if Config.AutoUpgradeInventory then
+        pcall(function() GeneralUpgrade:FireServer("Gold", "Inventory") end)
+    end
+    if Config.AutoUpgradeGold then
+        pcall(function() GeneralUpgrade:FireServer("Gold", "Gold") end)
+    end
+    if Config.AutoUpgradeSlots then
+        pcall(function() GeneralUpgrade:FireServer("Gold", "Slots") end)
+    end
 end
 
 -- Anti-AFK Handler
@@ -1931,11 +1935,11 @@ task.spawn(function()
             local totalPlots = Workspace:FindFirstChild("Plots") and #Workspace.Plots:GetChildren() or 0
             
             plotPara.Title = string.format("📍 Assigned: %s (Total Server Plots: %d)", plotName, totalPlots)
-            plotPara.Content = string.format("🎯 Status: EquipBest [%s]  |  Upgrade [%s]  |  Evolve [%s]  |  SmartBuy [%s]", 
+            plotPara.Content = string.format("🎯 Status: EquipBest [%s]  |  Upgrade [%s]  |  Evolve [%s]  |  Stats [%s]", 
                 Config.AutoEquipBest and "ON" or "OFF",
                 Config.AutoLevelUp and "ON" or "OFF",
                 Config.AutoEvolve and "ON" or "OFF",
-                Config.AutoBuyByRarity and "ON" or "OFF"
+                Config.AutoUpgradeStats and "ON" or "OFF"
             )
             
             raritiesSummary.Title = "👑 15 In-Game Rarity Hierarchy"
@@ -1951,7 +1955,7 @@ DashTab:CreateHeader("Master Auto Farm Controls", 7)
 
 DashTab:CreateToggle({
     Name = "Auto Equip Best Units",
-    Description = "Automatically keeps your strongest team placed into battle",
+    Description = "Automatically and continuously keeps your strongest team equipped",
     Badge = "BEST",
     Default = false,
     Callback = function(state)
@@ -1966,7 +1970,7 @@ DashTab:CreateToggle({
 })
 
 DashTab:CreateToggle({
-    Name = "Auto Level Up / Upgrade Team",
+    Name = "Auto Level Up Team",
     Description = "Continuously upgrades character levels as Gold is earned",
     Badge = "UPGRADE",
     Default = false,
@@ -1975,7 +1979,6 @@ DashTab:CreateToggle({
         if state then
             Cupie:StartLoop("AutoLevelUpLoop", 1.0, function()
                 if CharactersLevelUp then CharactersLevelUp:FireServer() end
-                if GeneralUpgrade then GeneralUpgrade:FireServer() end
             end)
         else
             Cupie:StopLoop("AutoLevelUpLoop")
@@ -1992,7 +1995,7 @@ DashTab:CreateToggle({
         Config.AutoEvolve = state
         if state then
             Cupie:StartLoop("AutoEvolveLoop", 3.0, function()
-                if EvolutionRemote then EvolutionRemote:FireServer() end
+                if EvolutionRemote then EvolutionRemote:FireServer({}) end
             end)
         else
             Cupie:StopLoop("AutoEvolveLoop")
@@ -2149,9 +2152,7 @@ GachaTab:CreateDropdown({
     Default = "Legendary & Above",
     Callback = function(choice)
         Config.LockMinRarity = choice
-        if Config.AutoLockRareUnits then
-            executeAutoLockUnits()
-        end
+        if Config.AutoLockRareUnits then executeAutoLockUnits() end
     end
 })
 
@@ -2164,9 +2165,7 @@ GachaTab:CreateToggle({
         Config.AutoLockRareUnits = state
         if state then
             executeAutoLockUnits()
-            Cupie:StartLoop("AutoLockLoop", 2.0, function()
-                executeAutoLockUnits()
-            end)
+            Cupie:StartLoop("AutoLockLoop", 2.0, function() executeAutoLockUnits() end)
         else
             Cupie:StopLoop("AutoLockLoop")
         end
@@ -2288,10 +2287,38 @@ GachaTab:CreateButton({
 })
 
 -- ══════════════════════════════════════════════════════════
--- TAB 3: 👥 TEAM & PROGRESSION (อัปเกรด & จัดทีม)
+-- TAB 3: 👥 TEAM & STAT UPGRADES (พัฒนาสเตตัส & สุ่ม Trait)
 -- ══════════════════════════════════════════════════════════
 local UpgradeTab = Window:CreateTab("Upgrades", 3)
-UpgradeTab:CreateHeader("Character Traits & Progression", 1)
+UpgradeTab:CreateHeader("Account Stat Upgrades (Verified Remotes)", 1)
+
+UpgradeTab:CreateToggle({
+    Name = "Auto Upgrade All Stats (Luck/Bag/Gold/Slots)",
+    Description = "Continuously spends Gold to upgrade Luck, Inventory size, Gold multiplier, and Slots",
+    Badge = "STATS",
+    Default = false,
+    Callback = function(state)
+        Config.AutoUpgradeStats = state
+        if state then
+            Cupie:StartLoop("AutoStatsLoop", 1.0, function()
+                executeStatUpgrades()
+            end)
+        else
+            Cupie:StopLoop("AutoStatsLoop")
+        end
+    end
+})
+
+UpgradeTab:CreateButton({
+    Name = "Upgrade All Stats Once Now",
+    Description = "Spends available Gold on all 4 stat upgrades immediately",
+    Callback = function()
+        executeStatUpgrades()
+        Cupie:Notify("Upgrades", "Sent All Stat Upgrade Requests!", 2.0)
+    end
+})
+
+UpgradeTab:CreateHeader("Character Traits & Progression", 4)
 
 UpgradeTab:CreateToggle({
     Name = "Auto Trait Reroll Loop",
@@ -2320,7 +2347,7 @@ UpgradeTab:CreateButton({
     end
 })
 
-UpgradeTab:CreateHeader("Manual Shop Purchasing", 4)
+UpgradeTab:CreateHeader("Manual Shop Purchasing", 7)
 
 UpgradeTab:CreateDropdown({
     Name = "Target Tier",
@@ -2356,7 +2383,6 @@ UpgradeTab:CreateToggle({
         if state then
             Cupie:StartLoop("AutoBuyLoop", 0.4, function()
                 if not CharactersBuy then return end
-                
                 local tiers = (Config.SelectedTier == "All") and {1, 2, 3, 4} or {Config.SelectedTier}
                 for _, tier in ipairs(tiers) do
                     if Config.SelectedSlot == "All Slots" then
@@ -2486,10 +2512,10 @@ CombatTab:CreateButton({
 })
 
 -- ══════════════════════════════════════════════════════════
--- TAB 5: 🎁 QUESTS & MISC
+-- TAB 5: 🎁 QUESTS & FACTIONS
 -- ══════════════════════════════════════════════════════════
 local MiscTab = Window:CreateTab("Misc", 5)
-MiscTab:CreateHeader("Quests & Free Rewards", 1)
+MiscTab:CreateHeader("Quests, Factions & Free Rewards", 1)
 
 MiscTab:CreateToggle({
     Name = "Auto Claim Battlepass Quests",
@@ -2528,6 +2554,27 @@ MiscTab:CreateToggle({
 })
 
 MiscTab:CreateButton({
+    Name = "Claim Tutorial Rewards",
+    Description = "Instantly claims tutorial rewards from Modules.Tutorial",
+    Callback = function()
+        if TutorialDone then TutorialDone:FireServer("8b415605-0fd4-48c8-82f5-fe629dadb5b3") end
+        if TutorialReward then TutorialReward:InvokeServer("8b415605-0fd4-48c8-82f5-fe629dadb5b3") end
+        Cupie:Notify("Tutorial", "Claimed Tutorial Rewards!", 2.0)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Auto Buy NPC Ticket (TalkTickets)",
+    Description = "Buys ticket from NPC via TalkTickets remote",
+    Callback = function()
+        if TalkTicketsRemote then
+            TalkTicketsRemote:FireServer("BuyOne")
+            Cupie:Notify("NPC Event", "Sent Buy Ticket Request!", 2.0)
+        end
+    end
+})
+
+MiscTab:CreateButton({
     Name = "Claim All Free Rewards Now",
     Description = "Instant one-click claim for all rewards & VIP",
     Callback = function()
@@ -2539,7 +2586,7 @@ MiscTab:CreateButton({
     end
 })
 
-MiscTab:CreateHeader("LocalPlayer Modifications", 4)
+MiscTab:CreateHeader("LocalPlayer Modifications", 7)
 
 MiscTab:CreateSlider({
     Name = "WalkSpeed",
@@ -2619,7 +2666,7 @@ Cupie:AddConnection(LocalPlayer.CharacterAdded:Connect(function(char)
     end
 end))
 
-MiscTab:CreateHeader("Theme & UI Control", 8)
+MiscTab:CreateHeader("Theme & UI Control", 12)
 
 MiscTab:CreateDropdown({
     Name = "UI Theme",

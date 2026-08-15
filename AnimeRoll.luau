@@ -2039,6 +2039,14 @@ local invRarityPara = DashTab:CreateParagraph({
     LayoutOrder = 6
 })
 
+DashTab:CreateHeader("CHARACTER MUTATIONS (SPECIAL VARIANTS)", 7)
+
+local mutPara = DashTab:CreateParagraph({
+    Title = "Owned Mutations (0 Total)",
+    Content = "Scanning mutations...",
+    LayoutOrder = 8
+})
+
 -- ══════════════════════════════════════════════════════════
 -- INSTANT REAL-TIME STATS & INVENTORY ENGINE (ZERO-LAG)
 -- ══════════════════════════════════════════════════════════
@@ -2303,6 +2311,10 @@ end
 -- PURE DATA-DRIVEN INVENTORY SCANNER (ZERO FALSE POSITIVES)
 -- ══════════════════════════════════════════════════════════
 
+-- ══════════════════════════════════════════════════════════
+-- PURE DATA-DRIVEN INVENTORY & MUTATION SCANNER (ZERO FALSE POSITIVES)
+-- ══════════════════════════════════════════════════════════
+
 local function scanPlayerCharacterInventory()
     local rarityCounts = {
         ["Limited"]   = 0,
@@ -2321,7 +2333,20 @@ local function scanPlayerCharacterInventory()
         ["Rare"]      = 0,
         ["Common"]    = 0
     }
+    
+    local mutationCounts = {
+        ["Gold"]       = 0,
+        ["Diamond"]    = 0,
+        ["Demon"]      = 0,
+        ["Destroyer"]  = 0,
+        ["Hollow"]     = 0,
+        ["Slayer"]     = 0,
+        ["Cursed"]     = 0,
+        ["Astronaut"]  = 0
+    }
+    
     local totalChars = 0
+    local totalMutations = 0
     local seenUIDs = {}
 
     local function resolveRarity(rawName, explicitRarity)
@@ -2341,26 +2366,43 @@ local function scanPlayerCharacterInventory()
         if nTrim == "" then return nil end
 
         -- 1. Check live game module cache from CharactersInfo
-        if CachedModuleRarities[nTrim] and rarityCounts[CachedModuleRarities[nTrim]] then
+        if CachedModuleRarities and CachedModuleRarities[nTrim] and rarityCounts[CachedModuleRarities[nTrim]] then
             return CachedModuleRarities[nTrim]
         end
 
         -- 2. Check exact character dictionary
-        if CharacterRarities[nTrim] and rarityCounts[CharacterRarities[nTrim]] then
+        if CharacterRarities and CharacterRarities[nTrim] and rarityCounts[CharacterRarities[nTrim]] then
             return CharacterRarities[nTrim]
         end
 
         -- 3. Check clean substring in dictionary
-        for charKey, rVal in pairs(CharacterRarities) do
-            if (nTrim == charKey or nTrim:find("^" .. charKey .. "$") or nTrim:find(charKey, 1, true)) and rarityCounts[rVal] then
-                return rVal
+        if CharacterRarities then
+            for charKey, rVal in pairs(CharacterRarities) do
+                if (nTrim == charKey or nTrim:find("^" .. charKey .. "$") or nTrim:find(charKey, 1, true)) and rarityCounts[rVal] then
+                    return rVal
+                end
             end
         end
 
         return "Common"
     end
 
-    local function addChar(name, explicitRarity, uid)
+    local function resolveMutation(rawMut)
+        if not rawMut then return nil end
+        local mStr = tostring(rawMut):lower()
+        if mStr:find("gold") then return "Gold"
+        elseif mStr:find("diamond") then return "Diamond"
+        elseif mStr:find("demon") then return "Demon"
+        elseif mStr:find("destroyer") then return "Destroyer"
+        elseif mStr:find("hollow") then return "Hollow"
+        elseif mStr:find("slayer") then return "Slayer"
+        elseif mStr:find("cursed") then return "Cursed"
+        elseif mStr:find("astronaut") or mStr:find("cosmic") then return "Astronaut"
+        end
+        return nil
+    end
+
+    local function addChar(name, explicitRarity, uid, explicitMutation)
         if not name or name == "" then return end
         if uid then
             if seenUIDs[uid] then return end
@@ -2372,7 +2414,7 @@ local function scanPlayerCharacterInventory()
         local nTrim = nClean:match("^%s*(.-)%s*$") or ""
         
         -- Filter out non-character words
-        if nTrim == "" or nTrim == "gold" or nTrim == "level" or nTrim == "slot" or nTrim == "button" or nTrim == "image" or nTrim == "frame" or nTrim == "pass" or nTrim == "shop" or nTrim == "index" or nTrim == "trade" or nTrim == "items" or nTrim == "animes" or nTrim == "profile" or nTrim == "upgr" or nTrim == "upgrades" or nTrim == "boost" or nTrim == "limited" or nTrim == "epic" or nTrim == "rare" or nTrim == "common" or nTrim == "legendary" or nTrim == "mythic" or nTrim == "secret" or nTrim == "god" then
+        if nTrim == "" or nTrim == "gold" or nTrim == "level" or nTrim == "slot" or nTrim == "button" or nTrim == "image" or nTrim == "frame" or nTrim == "pass" or nTrim == "shop" or nTrim == "index" or nTrim == "trade" or nTrim == "items" or nTrim == "animes" or nTrim == "profile" or nTrim == "upgr" or nTrim == "upgrades" or nTrim == "boost" then
             return
         end
         
@@ -2380,6 +2422,12 @@ local function scanPlayerCharacterInventory()
         if finalRarity and rarityCounts[finalRarity] then
             totalChars = totalChars + 1
             rarityCounts[finalRarity] = rarityCounts[finalRarity] + 1
+        end
+
+        local finalMut = resolveMutation(explicitMutation) or resolveMutation(raw)
+        if finalMut and mutationCounts[finalMut] then
+            totalMutations = totalMutations + 1
+            mutationCounts[finalMut] = mutationCounts[finalMut] + 1
         end
     end
 
@@ -2406,10 +2454,11 @@ local function scanPlayerCharacterInventory()
                         if type(v) == "table" then
                             local cName = v.Name or v.CharacterName or v.Id or tostring(k)
                             local cRarity = v.Rarity or v.Tier
+                            local cMut = v.Mutation or v.Mutations or v.Variant or v.Shiny
                             local cUID = v.UUID or v.UID or (key .. "_" .. tostring(k))
-                            addChar(cName, cRarity, cUID)
+                            addChar(cName, cRarity, cUID, cMut)
                         elseif type(v) == "string" then
-                            addChar(v, nil, key .. "_" .. tostring(k))
+                            addChar(v, nil, key .. "_" .. tostring(k), nil)
                         end
                     end
                 end
@@ -2427,10 +2476,13 @@ local function scanPlayerCharacterInventory()
                     foundFromData = true
                     for _, item in ipairs(sub:GetChildren()) do
                         local attrR = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
+                        local attrM = item:GetAttribute("Mutation") or item:GetAttribute("Mutations") or item:GetAttribute("Variant") or item:GetAttribute("Shiny")
                         local rChild = item:FindFirstChild("Rarity") or item:FindFirstChild("Tier")
+                        local mChild = item:FindFirstChild("Mutation") or item:FindFirstChild("Mutations")
                         local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
+                        local mVal = (attrM and type(attrM) == "string" and attrM) or (mChild and mChild:IsA("ValueBase") and tostring(mChild.Value)) or nil
                         local itemUID = item:GetAttribute("UUID") or ("df_" .. item:GetFullName())
-                        addChar(item.Name, rVal, itemUID)
+                        addChar(item.Name, rVal, itemUID, mVal)
                     end
                 end
             end
@@ -2445,39 +2497,45 @@ local function scanPlayerCharacterInventory()
                 foundFromData = true
                 for _, item in ipairs(sub:GetChildren()) do
                     local attrR = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
+                    local attrM = item:GetAttribute("Mutation") or item:GetAttribute("Mutations") or item:GetAttribute("Variant")
                     local rChild = item:FindFirstChild("Rarity") or item:FindFirstChild("Tier")
+                    local mChild = item:FindFirstChild("Mutation") or item:FindFirstChild("Mutations")
                     local rVal = (attrR and type(attrR) == "string" and attrR) or (rChild and rChild:IsA("ValueBase") and tostring(rChild.Value)) or nil
+                    local mVal = (attrM and type(attrM) == "string" and attrM) or (mChild and mChild:IsA("ValueBase") and tostring(mChild.Value)) or nil
                     local itemUID = item:GetAttribute("UUID") or ("lp_" .. item:GetFullName())
-                    addChar(item.Name, rVal, itemUID)
+                    addChar(item.Name, rVal, itemUID, mVal)
                 end
             end
         end
     end)
 
-    -- 4. Bottom Hotbar Slots in PlayerGui (Strict Slot Detection, No general UI search)
+    -- 4. Bottom Hotbar Slots in PlayerGui
     pcall(function()
         local pGui = LocalPlayer:FindFirstChild("PlayerGui")
         if pGui then
             for _, g in ipairs(pGui:GetChildren()) do
                 if g:IsA("ScreenGui") and g.Name ~= "CUPIEUI" and g.Enabled then
                     for _, desc in ipairs(g:GetDescendants()) do
-                        -- Look only for slot card elements that have a Level Label and a Character Name label
                         if (desc:IsA("Frame") or desc:IsA("ImageLabel")) and (desc.Name:lower():find("slot") or desc.Name:match("^%d+$")) then
                             local lvLabel = nil
                             local nameLabel = nil
+                            local mutLabel = nil
                             for _, ch in ipairs(desc:GetChildren()) do
                                 if ch:IsA("TextLabel") and ch.Visible then
                                     local txt = ch.Text:lower()
                                     if txt:find("lv") or txt:match("^%d+$") then
                                         lvLabel = ch
-                                    elseif CharacterRarities[txt] or CharacterRarities[txt:match("^%s*(.-)%s*$")] then
+                                    elseif CharacterRarities and (CharacterRarities[txt] or CharacterRarities[txt:match("^%s*(.-)%s*$")]) then
                                         nameLabel = ch
+                                    elseif txt:find("gold") or txt:find("diamond") or txt:find("demon") or txt:find("destroyer") or txt:find("hollow") or txt:find("slayer") or txt:find("cursed") or txt:find("astronaut") then
+                                        mutLabel = ch.Text
                                     end
                                 end
                             end
                             if lvLabel and nameLabel then
                                 local slotUID = "hotbar_slot_" .. desc:GetFullName()
-                                addChar(nameLabel.Text, desc:GetAttribute("Rarity"), slotUID)
+                                local slotMut = desc:GetAttribute("Mutation") or mutLabel or (desc.Name:lower():find("gold") and "Gold")
+                                addChar(nameLabel.Text, desc:GetAttribute("Rarity"), slotUID, slotMut)
                             end
                         end
                     end
@@ -2486,7 +2544,7 @@ local function scanPlayerCharacterInventory()
         end
     end)
     
-    return rarityCounts, totalChars
+    return rarityCounts, totalChars, mutationCounts, totalMutations
 end
 
 
@@ -2522,11 +2580,14 @@ local function updateDashboardStats(startTime)
         ))
     end
     
-    -- 3. Characters Count by Rarity
+    -- 3. Characters Count by Rarity & Mutations
+    local rCounts, totalCount, mCounts, totalMutations = scanPlayerCharacterInventory()
+    rCounts = rCounts or {}
+    totalCount = totalCount or 0
+    mCounts = mCounts or {}
+    totalMutations = totalMutations or 0
+    
     if invRarityPara then
-        local rCounts, totalCount = scanPlayerCharacterInventory()
-        rCounts = rCounts or {}
-        totalCount = totalCount or 0
         invRarityPara:SetTitle(string.format("Owned Characters (%d Total)", totalCount))
         invRarityPara:SetContent(string.format(
             "• Limited   : %d  |  INVASION : %d  |  OG       : %d\n" ..
@@ -2539,6 +2600,19 @@ local function updateDashboardStats(startTime)
             rCounts["Secret"] or 0, rCounts["Godlyx"] or 0, rCounts["Godly"] or 0,
             rCounts["God"] or 0, rCounts["Mythic"] or 0, rCounts["Legendary"] or 0,
             rCounts["Epic"] or 0, rCounts["Rare"] or 0, rCounts["Common"] or 0
+        ))
+    end
+    
+    -- 4. Mutations Count Card
+    if mutPara then
+        mutPara:SetTitle(string.format("Owned Mutations (%d Total)", totalMutations))
+        mutPara:SetContent(string.format(
+            "• Gold       : %d  |  Diamond   : %d  |  Demon     : %d\n" ..
+            "• Destroyer  : %d  |  Hollow    : %d  |  Slayer    : %d\n" ..
+            "• Cursed     : %d  |  Astronaut : %d",
+            mCounts["Gold"] or 0, mCounts["Diamond"] or 0, mCounts["Demon"] or 0,
+            mCounts["Destroyer"] or 0, mCounts["Hollow"] or 0, mCounts["Slayer"] or 0,
+            mCounts["Cursed"] or 0, mCounts["Astronaut"] or 0
         ))
     end
 end

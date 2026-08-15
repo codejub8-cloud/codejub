@@ -2045,65 +2045,85 @@ local invRarityPara = DashTab:CreateParagraph({
 -- Known Character Rarity Dictionary (Instant O(1) Lookup, No require hang)
 -- ══════════════════════════════════════════════════════════
 -- ══════════════════════════════════════════════════════════
--- 15-TIER ANIME CHARACTER RARITY DATABASE (CHARACTER NAMES ONLY)
+-- COMPLETE 122-CHARACTER ACCURATE RARITY DATABASE
 -- ══════════════════════════════════════════════════════════
 
 local CharacterRarities = {
-    -- 1. Common
+    -- 1. Common (Basic Tier 1)
     ["luffy"] = "Common", ["luppi"] = "Common", ["zoro"] = "Common", ["sanji"] = "Common",
-    ["nami"] = "Common", ["usopp"] = "Common", ["chopper"] = "Common", ["naruto"] = "Common",
-    ["sasuke"] = "Common", ["sakura"] = "Common", ["ichigo"] = "Common", ["rukia"] = "Common",
-    ["goku"] = "Common", ["vegeta"] = "Common", ["krillin"] = "Common", ["tanjiro"] = "Common",
-    ["nezuko"] = "Common", ["zenitsu"] = "Common", ["inosuke"] = "Common", ["mob"] = "Common",
-    ["reigen"] = "Common", ["rock lee"] = "Common", ["rocklee"] = "Common", ["shinra"] = "Common",
-    ["erwin"] = "Common", ["deku"] = "Common", ["bakugo"] = "Common", ["todoroki"] = "Common",
-    ["asta"] = "Common", ["yuno"] = "Common", ["kugisaki"] = "Common",
+    ["nami"] = "Common", ["ussop"] = "Common", ["usopp"] = "Common", ["chopper"] = "Common",
+    ["naruto"] = "Common", ["sakura"] = "Common", ["krillin"] = "Common", ["orihime"] = "Common",
+    ["choji"] = "Common", ["goku"] = "Common", ["deku"] = "Common", ["bakugo"] = "Common",
 
-    -- 2. Rare
-    ["itadori"] = "Rare", ["itadoro"] = "Rare", ["ace"] = "Rare", ["sabo"] = "Rare",
-    ["law"] = "Rare", ["kid"] = "Rare", ["kakashi"] = "Rare", ["gaara"] = "Rare",
-    ["itachi"] = "Rare", ["renji"] = "Rare", ["byakuya"] = "Rare", ["piccolo"] = "Rare",
-    ["gohan"] = "Rare", ["trunks"] = "Rare", ["rengoku"] = "Rare", ["tomioka"] = "Rare",
-    ["shinobu"] = "Rare", ["maki"] = "Rare", ["megumi"] = "Rare", ["nobara"] = "Rare",
-    ["todo"] = "Rare", ["choso"] = "Rare", ["kaminari"] = "Rare", ["iida"] = "Rare",
+    -- 2. Rare (Tier 2)
+    ["itadori"] = "Rare", ["itadoro"] = "Rare", ["rock lee"] = "Rare", ["rocklee"] = "Rare",
+    ["shinra"] = "Rare", ["erwin"] = "Rare", ["mob"] = "Rare", ["reigen"] = "Rare",
+    ["tanjiro"] = "Rare", ["nezuko"] = "Rare", ["zenitsu"] = "Rare", ["inosuke"] = "Rare",
+    ["sasuke"] = "Rare", ["ichigo"] = "Rare", ["rukia"] = "Rare", ["vegeta"] = "Rare",
+    ["piccolo"] = "Rare", ["renji"] = "Rare", ["maki"] = "Rare", ["megumi"] = "Rare",
+    ["nobara"] = "Rare", ["nanami"] = "Rare", ["sakamoto"] = "Rare", ["sakamoto (fit)"] = "Rare",
+    ["mash"] = "Rare", ["shikamaru"] = "Rare", ["juuzou"] = "Rare", ["okurun"] = "Rare",
+    ["kaminari"] = "Rare", ["iida"] = "Rare", ["todoroki"] = "Rare", ["asta"] = "Rare",
+    ["yuno"] = "Rare", ["kugisaki"] = "Rare", ["manji"] = "Rare",
 
-    -- 3. Epic
-    ["whitebeard"] = "Epic", ["blackbeard"] = "Epic", ["shanks"] = "Epic", ["mihawk"] = "Epic",
-    ["minato"] = "Epic", ["jiraiya"] = "Epic", ["tsunade"] = "Epic", ["orochimaru"] = "Epic",
-    ["aizen"] = "Epic", ["kenpachi"] = "Epic", ["hitsugaya"] = "Epic", ["frieza"] = "Epic",
-    ["cell"] = "Epic", ["buu"] = "Epic", ["akaza"] = "Epic", ["douma"] = "Epic",
-    ["kokushibo"] = "Epic", ["saitama"] = "Epic", ["genos"] = "Epic", ["all might"] = "Epic",
-    ["allmight"] = "Epic", ["endeavor"] = "Epic", ["dabi"] = "Epic", ["shigaraki"] = "Epic",
+    -- 3. Epic (Tier 3)
+    ["ace"] = "Epic", ["sabo"] = "Epic", ["law"] = "Epic", ["kid"] = "Epic",
+    ["kakashi"] = "Epic", ["gaara"] = "Epic", ["itachi"] = "Epic", ["byakuya"] = "Epic",
+    ["gohan"] = "Epic", ["trunks"] = "Epic", ["rengoku"] = "Epic", ["tomioka"] = "Epic",
+    ["shinobu"] = "Epic", ["kisuke"] = "Epic", ["grimmjow"] = "Epic", ["genos"] = "Epic",
+    ["tatsumaki"] = "Epic", ["hakari"] = "Epic", ["kashimo"] = "Epic", ["katakuri"] = "Epic",
+    ["magellan"] = "Epic", ["doflamingo"] = "Epic", ["ban"] = "Epic", ["arthur"] = "Epic",
+    ["stark"] = "Epic", ["entoma"] = "Epic", ["shalltear"] = "Epic", ["albedo"] = "Epic",
+    ["frieren"] = "Epic", ["simo hayha"] = "Epic", ["todo"] = "Epic", ["choso"] = "Epic",
+    ["dabi"] = "Epic", ["shigaraki"] = "Epic",
 
-    -- 4. Legendary
-    ["roger"] = "Legendary", ["gol d roger"] = "Legendary", ["kaido"] = "Legendary",
-    ["bigmom"] = "Legendary", ["big mom"] = "Legendary", ["garp"] = "Legendary",
-    ["madara"] = "Legendary", ["hashirama"] = "Legendary", ["obito"] = "Legendary",
-    ["pain"] = "Legendary", ["nagato"] = "Legendary", ["yamamoto"] = "Legendary",
-    ["yhwach"] = "Legendary", ["beerus"] = "Legendary", ["whis"] = "Legendary",
-    ["muzan"] = "Legendary", ["yoruichi"] = "Legendary", ["boros"] = "Legendary",
-    ["garou"] = "Legendary", ["gojo"] = "Legendary", ["sukuna"] = "Legendary",
-    ["toji"] = "Legendary", ["yuta"] = "Legendary", ["ainz"] = "Legendary",
+    -- 4. Legendary (Tier 4)
+    ["whitebeard"] = "Legendary", ["blackbeard"] = "Legendary", ["shanks"] = "Legendary",
+    ["mihawk"] = "Legendary", ["minato"] = "Legendary", ["jiraiya"] = "Legendary",
+    ["tsunade"] = "Legendary", ["orochimaru"] = "Legendary", ["aizen"] = "Legendary",
+    ["kenpachi"] = "Legendary", ["hitsugaya"] = "Legendary", ["frieza"] = "Legendary",
+    ["cell"] = "Legendary", ["buu"] = "Legendary", ["akaza"] = "Legendary", ["douma"] = "Legendary",
+    ["kokushibo"] = "Legendary", ["saitama"] = "Legendary", ["all might"] = "Legendary",
+    ["allmight"] = "Legendary", ["endeavor"] = "Legendary", ["guts"] = "Legendary",
+    ["dio"] = "Legendary", ["kaneki"] = "Legendary", ["yujiro"] = "Legendary",
+    ["jiren"] = "Legendary", ["lelouch"] = "Legendary", ["hoshina"] = "Legendary",
+    ["darkmagician"] = "Legendary", ["darkmagiciangirl"] = "Legendary", ["yugi"] = "Legendary",
+    ["ulquiorra"] = "Legendary", ["tobi"] = "Legendary", ["mojuro"] = "Legendary",
 
-    -- 5. Mythic
-    ["goku black"] = "Mythic", ["gokublack"] = "Mythic", ["broly"] = "Mythic",
-    ["gogeta"] = "Mythic", ["vegito"] = "Mythic", ["gear 5"] = "Mythic", ["gear5"] = "Mythic",
-    ["nika"] = "Mythic", ["sun god"] = "Mythic", ["kaguya"] = "Mythic", ["hagoromo"] = "Mythic",
-    ["isshiki"] = "Mythic", ["mugetsu"] = "Mythic", ["bankai ichigo"] = "Mythic",
-    ["sung jinwoo"] = "Mythic", ["shadow monarch"] = "Mythic", ["eren founder"] = "Mythic",
+    -- 5. Mythic (Tier 5)
+    ["roger"] = "Mythic", ["gol d roger"] = "Mythic", ["kaido"] = "Mythic",
+    ["bigmom"] = "Mythic", ["big mom"] = "Mythic", ["garp"] = "Mythic",
+    ["madara"] = "Mythic", ["hashirama"] = "Mythic", ["obito"] = "Mythic",
+    ["pain"] = "Mythic", ["nagato"] = "Mythic", ["yamamoto"] = "Mythic",
+    ["yhwatch"] = "Mythic", ["yhwach"] = "Mythic", ["beerus"] = "Mythic", ["whis"] = "Mythic",
+    ["muzan"] = "Mythic", ["yoruichi"] = "Mythic", ["yorichi"] = "Mythic",
+    ["boros"] = "Mythic", ["boros v2"] = "Mythic", ["garou"] = "Mythic",
+    ["gojo"] = "Mythic", ["sukuna"] = "Mythic", ["toji"] = "Mythic", ["yuta"] = "Mythic",
+    ["ainz"] = "Mythic", ["mahoraga"] = "Mythic", ["rika"] = "Mythic", ["makima"] = "Mythic",
+    ["gyomei"] = "Mythic", ["yuji (modulo)"] = "Mythic", ["britain army"] = "Mythic",
 
-    -- 6. God
+    -- 6. Secret (Tier 6)
+    ["goku (black)"] = "Secret", ["gokublack"] = "Secret", ["goku black"] = "Secret",
+    ["broly"] = "Secret", ["gogeta"] = "Secret", ["vegito"] = "Secret",
+    ["gear 5"] = "Secret", ["gear5"] = "Secret", ["nika"] = "Secret", ["sun god"] = "Secret",
+    ["sukuna (heian)"] = "Secret", ["gojo (shibuya)"] = "Secret", ["saitama (serious)"] = "Secret",
+    ["muzan (evolved)"] = "Secret", ["naruto (six path)"] = "Secret",
+    ["naruto (six path) clone"] = "Secret", ["aizen (transcendent)"] = "Secret",
+    ["black frieza"] = "Secret", ["cosmic garou"] = "Secret", ["junwoo"] = "Secret",
+    ["sung jinwoo"] = "Secret", ["hakari (jackpot)"] = "Secret", ["madara (six path)"] = "Secret",
+    ["madara (limbo)"] = "Secret",
+
+    -- 7. God (Tier 7)
     ["zeno"] = "God", ["grand priest"] = "God", ["super shenron"] = "God",
-    ["rimuru"] = "God", ["rimuru tempest"] = "God", ["anos"] = "God", ["anos voldigoad"] = "God",
-    ["anti spiral"] = "God", ["antispiral"] = "God", ["featherine"] = "God",
+    ["rimuru"] = "God", ["milim"] = "God", ["julius"] = "God", ["fused zamasu"] = "God",
+    ["dabura"] = "God", ["death knight"] = "God", ["kaguya"] = "God", ["hagoromo"] = "God",
+    ["isshiki"] = "God", ["anos"] = "God", ["anti spiral"] = "God", ["featherine"] = "God",
 
-    -- 7. Godly
+    -- 8. Godly & Higher
     ["godly luffy"] = "Godly", ["godly goku"] = "Godly", ["godly naruto"] = "Godly",
     ["godly gojo"] = "Godly", ["godly sukuna"] = "Godly", ["godly saitama"] = "Godly",
-
-    -- 8. Godlyx
-    ["godlyx void"] = "Godlyx", ["godlyx infinity"] = "Godlyx",
-    ["godlyx cosmic"] = "Godlyx", ["godlyx chaos"] = "Godlyx"
+    ["godlyx void"] = "Godlyx", ["godlyx infinity"] = "Godlyx", ["godlyx cosmic"] = "Godlyx",
+    ["godlyx chaos"] = "Godlyx"
 }
 
 -- Asynchronous Module Cache for In-Game Exact Data
@@ -2129,17 +2149,6 @@ task.spawn(function()
     end)
 end)
 
-
--- Fast Direct Character Inventory Scanner (Accurate 15-Rarity Classification)
--- ══════════════════════════════════════════════════════════
--- ULTIMATE 15-TIER ACCURATE INVENTORY SCANNER & DATASERVICE HOOK
--- ══════════════════════════════════════════════════════════
-
--- ══════════════════════════════════════════════════════════
--- TOTAL CHARACTER SCANNER (INVENTORY BAG + PLACED ON PLOT)
--- ══════════════════════════════════════════════════════════
-
--- ══════════════════════════════════════════════════════════
 
 -- Fast Number Formatting (e.g. 1,250,000)
 local function formatNumberWithCommas(amount)

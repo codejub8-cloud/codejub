@@ -3514,59 +3514,74 @@ Log("Info", "AutoRoll: %s, AutoBuy: %s, AutoSell: %s",
 local function performAutoRollStep()
     if not Config.AutoRoll then return end
 
-    -- STEP 1: พยายามซื้ออัตโนมัติ (เฉพาะตัวที่เงินพอ)
+    -- STEP 1: Smart Auto Buy with Hard Gold Gate (Freeze loop if funds not ready)
     if Config.AutoBuyByRarity then
         local targets = getMatchingStandTargets()
-        for _, target in ipairs(targets) do
-            local curGold = getCurrentPlayerGold()
-            local cost = target.Cost or 200
-            if curGold >= cost then
-                buyStandTarget(target)
-                task.wait(randomDelay(0.08, 0.03))
-            else
-                warn("⏳ [AUTO ROLL] Not enough gold for " .. tostring(target.Name) .. " (Have: " .. tostring(curGold) .. ", Need: " .. tostring(cost) .. ")")
+        
+        if #targets > 0 then
+            for _, target in ipairs(targets) do
+                local requiredCost = target.Cost or 200
+                local curGold = getCurrentPlayerGold()
+                
+                local waitCount = 0
+                while Config.AutoRoll and Config.AutoBuyByRarity and target.Model and target.Model.Parent and getCurrentPlayerGold() < requiredCost do
+                    task.wait(randomDelay(0.4, 0.2))
+                    waitCount = waitCount + 1
+                    if waitCount >= 12 then
+                        Log("Warning", "Waiting for Gold (%d / %d) to buy %s...", getCurrentPlayerGold(), requiredCost, target.Name or "Unit")
+                        waitCount = 0
+                    end
+                end
+                
+                if target.Model and target.Model.Parent and getCurrentPlayerGold() >= requiredCost then
+                    buyStandTarget(target)
+                    task.wait(randomDelay(0.12, 0.05))
+                end
+            end
+        end
+        
+        -- If any target still cannot be bought due to funds, DO NOT ROLL AWAY!
+        local remaining = getMatchingStandTargets()
+        for _, t in ipairs(remaining) do
+            if getCurrentPlayerGold() < (t.Cost or 200) then
+                return
             end
         end
     end
 
     if not Config.AutoRoll then return end
 
-    -- STEP 1.5: ตรวจสอบเงินก่อน Roll (ถ้า Roll ต้องใช้เงิน)
-    local rollCost = 100  -- ปรับตามค่าใช้จ่ายในการ Roll ของเกม (ถ้า Roll ฟรีให้ตั้งเป็น 0)
-    local waitCount = 0
-    while Config.AutoRoll and getCurrentPlayerGold() < rollCost do
-        waitCount = waitCount + 1
-        if waitCount % 10 == 0 then
-            warn("⏳ [AUTO ROLL] Waiting for gold to roll... (Have: " .. tostring(getCurrentPlayerGold()) .. ", Need: " .. tostring(rollCost) .. ")")
-        end
-        task.wait(0.5)
-    end
-
-    if not Config.AutoRoll then return end
-
-    -- STEP 2: Roll
+    -- STEP 2: Trigger Roll (Roll is free on stand)
     local plot = getMyPlot()
     local prompt, btn = getPlotRollPrompt(plot)
     if prompt then
         firePrompt(prompt)
-        Log("Info", "Roll triggered via ProximityPrompt")
     elseif CharactersRoll then
         pcall(function()
             CharactersRoll:FireServer()
-            Log("Info", "Roll triggered via Remote")
         end)
     end
 
-    -- STEP 3: รอสั้น ๆ แล้วซื้อซ้ำ
+    -- STEP 3: Wait for roll animation & stands to spawn with anti-detection variance
     task.wait(randomDelay(0.3, 0.1))
+
+    -- STEP 4: Inspect new roll and auto buy if funds are ready
     if Config.AutoBuyByRarity then
-        executeSmartAutoBuy()
+        local newTargets = getMatchingStandTargets()
+        for _, target in ipairs(newTargets) do
+            local cost = target.Cost or 200
+            if getCurrentPlayerGold() >= cost then
+                buyStandTarget(target)
+                task.wait(randomDelay(0.08, 0.04))
+            end
+        end
     end
 
     if Config.AutoPickupAll then
         autoPickupAll()
     end
 
+    -- STEP 5: Wait user configured Roll Delay with variance
     task.wait(randomDelay(math.max(1.5, Config.RollDelay), 0.3))
 end
 
@@ -3774,6 +3789,7 @@ UpgradeTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoPickupAll = state
+        saveConfig()
         saveConfig()
         if state then
             Cupie:StartLoop("AutoPickupLoop", 1.5, function()
@@ -4016,18 +4032,6 @@ UpgradeTab:CreateToggle({
 local CombatTab = Window:CreateTab("Combat", 4)
 CombatTab:CreateHeader("Combat Automation & Battle Loop", 1)
 
-local isFighting = false
-
-if FightFolder then
-    local battleEnded = FightFolder:FindFirstChild("Ended") or FightFolder:FindFirstChild("BattleEnded") or FightFolder:FindFirstChild("Finish")
-    if battleEnded then
-        Cupie:AddConnection(battleEnded.OnClientEvent:Connect(function()
-            isFighting = false
-            Log("Info", "Battle finished, ready for next round.")
-        end))
-    end
-end
-
 CombatTab:CreateToggle({
     Name = "Auto Fight (Infinite Battles)",
     Description = "Automatically starts battles and advances waves continuously",
@@ -4037,11 +4041,9 @@ CombatTab:CreateToggle({
         Config.AutoFight = state
         saveConfig()
         if state then
-            Cupie:StartLoop("AutoFightLoop", 2.5, function()
-                if not isFighting and FightStart then
-                    FightStart:FireServer("AutoPlay")
-                    isFighting = true
-                    Log("Info", "AutoPlay battle started.")
+            Cupie:StartLoop("AutoFightLoop", 2.0, function()
+                if FightStart then
+                    pcall(function() FightStart:FireServer("AutoPlay") end)
                 end
                 if Config.AutoWaveSkip and FightArrived then
                     pcall(function() FightArrived:FireServer() end)
@@ -4050,9 +4052,7 @@ CombatTab:CreateToggle({
         else
             Cupie:StopLoop("AutoFightLoop")
             if FightStart then
-                FightStart:FireServer("Stop")
-                isFighting = false
-                Log("Info", "Combat halted.")
+                pcall(function() FightStart:FireServer("Stop") end)
             end
         end
     end
@@ -4081,7 +4081,7 @@ CombatTab:CreateSlider({
     Description = "Interval between attack strikes (seconds) - 0.05s to 0.50s",
     Min = 0.05,
     Max = 0.50,
-    Default = 0.15,
+    Default = 0.08,
     Decimals = 2,
     Suffix = "s",
     Callback = function(val)
@@ -4102,6 +4102,7 @@ CombatTab:CreateToggle({
     Default = true,
     Callback = function(state)
         Config.AutoWaveSkip = state
+        saveConfig()
     end
 })
 
@@ -4152,6 +4153,7 @@ MiscTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoFactionQuests = state
+        saveConfig()
         saveConfig()
         if state then
             Cupie:StartLoop("AutoFactionLoop", 5.0, function()
@@ -4372,4 +4374,4 @@ MiscTab:CreateButton({
 -- Switch to Stats Tab by Default
 Window:SwitchTab("Stats")
 
-Cupie:Notify("CUPIE HUB", "Loaded Anime Roll Hub v1.0 Successfully!", 3.5)
+Cupie:Notify("CUPIE HUB", "Loaded Anime Roll Hub v2.0 Successfully!", 3.5)

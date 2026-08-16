@@ -1836,11 +1836,11 @@ local InGameRarities = {
 
 -- Systematic Configuration State
 local Config = {
-    -- Gacha & Auto Roll
+    -- Auto Roll
     AutoRoll            = false,
     RollDelay           = 2.5,
     
-    -- Smart Auto Buy by Rarity
+    -- Auto Buy (Multi-Select Filter)
     AutoBuyByRarity     = false,
     SelectedBuyRarities = {
         ["Common"]    = true,
@@ -1853,58 +1853,49 @@ local Config = {
         ["Limited"]   = true
     },
     SelectedBuyMutations = {
-        ["Gold"]      = true,
-        ["Astronaut"] = true
+        ["Gold"]       = true,
+        ["Diamond"]    = true,
+        ["Demon"]      = true,
+        ["Destroyer"]  = true,
+        ["Hollow"]     = true,
+        ["Slayer"]     = true,
+        ["Cursed"]     = true,
+        ["Astronaut"]  = true
     },
-    BuyRuleTier         = "All Tiers",
     
-    -- Auto Sell Rarity Selection
+    -- Auto Sell Rarities (Multi-Select)
     AutoSellLowTier     = false,
-    SellThreshold       = "Common Only",
+    SelectedSellRarities = {
+        ["Common"]    = true,
+        ["Rare"]      = true,
+        ["Epic"]      = false,
+        ["Legendary"] = false,
+        ["Mythic"]    = false,
+        ["Secret"]    = false,
+        ["God"]       = false,
+        ["Limited"]   = false
+    },
     
-    -- Auto Lock Rarity Selection
-    AutoLockRareUnits   = true,
-    LockMinRarity       = "Legendary & Above",
-    
-    -- Target Stop Filter
-    TargetRarityFilter  = false,
-    StopRarityTarget    = "Mythic & Above",
-    
-    -- Wheel & Popups
-    AutoSpinWheel       = false,
-    HideNotifications   = false,
-    
-    -- Dashboard & Progression Toggles (Equip, Level, Evolve, Stats)
+    -- Team Progression
     AutoEquipBest       = false,
     AutoLevelUp         = false,
     AutoEvolve          = false,
     AutoUpgradeStats    = false,
-    AutoUpgradeLuck     = true,
-    AutoUpgradeInventory= true,
-    AutoUpgradeGold     = true,
-    AutoUpgradeSlots    = true,
     AutoTraitReroll     = false,
     
-    -- Factions & NPC Tickets
-    AutoFactionQuests   = false,
-    AutoBuyNPCTickets   = false,
-    
-    -- Shop Direct
-    AutoBuyTier         = false,
-    SelectedTier        = 1,
-    SelectedSlot        = "All Slots",
-    
-    -- Combat
+    -- Combat & Farming
     AutoFight           = false,
     FastAttackAura      = false,
     AttackSpeed         = 0.08,
     AutoWaveSkip        = true,
     
-    -- Quests & Free
+    -- Quests & Rewards
     AutoClaimBP         = false,
     AutoFreeRewards     = false,
+    AutoSpinWheel       = false,
+    HideNotifications   = true,
     
-    -- LocalPlayer & QoL
+    -- Player Mods
     WalkSpeed           = 16,
     JumpPower           = 50,
     InfJump             = false,
@@ -1958,1011 +1949,58 @@ end
 -- ══════════════════════════════════════════════════════════
 
 local function cleanAllExistingNotifications()
-    -- Intentionally non-destructive to preserve all game HUD buttons (Pass, Shop, Upgrades, Gold HUD)
-end
-
--- ══════════════════════════════════════════════════════════
--- HELPER FUNCTIONS (Plot, In-Game Equip & Remote Handlers)
--- ══════════════════════════════════════════════════════════
-
-local function getMyPlot()
-    local plots = Workspace:FindFirstChild("Plots")
-    if not plots then return nil end
-    
-    for _, plot in ipairs(plots:GetChildren()) do
-        local ownerAttr = plot:GetAttribute("Owner") or plot:GetAttribute("UserId")
-        if ownerAttr and (tostring(ownerAttr) == LocalPlayer.Name or tostring(ownerAttr) == tostring(LocalPlayer.UserId)) then
-            return plot
-        end
-    end
-    
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if root then
-        local closest, minDist = nil, math.huge
-        for _, plot in ipairs(plots:GetChildren()) do
-            local cf = plot:GetPivot()
-            local dist = (cf.Position - root.Position).Magnitude
-            if dist < minDist then
-                minDist = dist
-                closest = plot
-            end
-        end
-        if closest and minDist < 250 then return closest end
-    end
-    
-    return plots:FindFirstChild("Plot1") or plots:FindFirstChild("Plot2") or plots:GetChildren()[1]
-end
-
-local function firePrompt(prompt)
-    if not prompt or not prompt.Enabled then return end
     pcall(function()
-        prompt.MaxActivationDistance = 999999
-        prompt.RequiresLineOfSight = false
-        prompt.HoldDuration = 0
-    end)
-    if fireproximityprompt then
-        pcall(function() fireproximityprompt(prompt) end)
-    elseif prompt.InputHoldBegin then
-        pcall(function()
-            prompt:InputHoldBegin()
-            task.wait(0.04)
-            prompt:InputHoldEnd()
-        end)
-    end
-end
-
-local function getPlotRollPrompt(plot)
-    if not plot then return nil end
-    local rollFolder = plot:FindFirstChild("Roll")
-    if rollFolder then
-        local rollBtn = rollFolder:FindFirstChild("RollButton")
-        if rollBtn then
-            local btn = rollBtn:FindFirstChild("Button") or rollBtn
-            local prompt = btn:FindFirstChild("RollPrompt") or btn:FindFirstChildWhichIsA("ProximityPrompt", true)
-            if prompt then return prompt, btn end
-        end
-        local anyPrompt = rollFolder:FindFirstChildWhichIsA("ProximityPrompt", true)
-        if anyPrompt then return anyPrompt, anyPrompt.Parent end
-    end
-    return nil, nil
-end
-
-local function smoothPositionToRollPad()
-    local plot = getMyPlot()
-    local _, btn = getPlotRollPrompt(plot)
-    if not btn then return end
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if root and btn:IsA("BasePart") then
-        local targetPos = btn.Position + Vector3.new(0, 3.2, 0)
-        root.CFrame = CFrame.new(targetPos, targetPos + btn.CFrame.LookVector)
-        root.AssemblyLinearVelocity = Vector3.zero
-        root.AssemblyAngularVelocity = Vector3.zero
-    end
-end
-
--- Exact In-Game Equip Best (Verified: Characters.UpdateInventory:FireServer("EquipBest"))
-local function triggerEquipBest()
-    if CharactersInv then
-        pcall(function() CharactersInv:FireServer("EquipBest") end)
-    end
-    
-    local plot = getMyPlot()
-    if plot then
-        local equipPrompt = plot:FindFirstChild("EquipPrompt", true) or plot:FindFirstChild("AutoEquipPrompt", true)
-        if equipPrompt then firePrompt(equipPrompt) end
-    end
-end
-
--- ══════════════════════════════════════════════════════════
--- UNIFIED 15-TIER IN-GAME RARITY INDEX & ORDER
--- ══════════════════════════════════════════════════════════
-
-local InGameRarities = {
-    [1]  = "Common",
-    [2]  = "Rare",
-    [3]  = "Epic",
-    [4]  = "Legendary",
-    [5]  = "Mythic",
-    [6]  = "Secret",
-    [7]  = "God",
-    [8]  = "Limited",
-    [9]  = "Godly",
-    [10] = "Godlyx",
-    [11] = "Divine",
-    [12] = "Immortal",
-    [13] = "OP",
-    [14] = "OG",
-    [15] = "INVASION"
-}
-
--- 100% OFFICIAL DECOMPILED IN-GAME CHARACTER RARITY MATRIX
--- (Supports both Internal Names & In-Game Parody Display Names)
--- ══════════════════════════════════════════════════════════
-
-local CharacterRarities = {
-    -- 1. Common (Tier 1)
-    ["zoro"] = "Common", ["zero"] = "Common",
-    ["krillin"] = "Common", ["keririn"] = "Common",
-    ["luffy"] = "Common", ["luppi"] = "Common",
-    ["ussop"] = "Common", ["usopp"] = "Common", ["usoff"] = "Common",
-    ["itadori"] = "Common", ["itadoro"] = "Common",
-    ["rock lee"] = "Common", ["rocklee"] = "Common", ["solid lei"] = "Common",
-
-    -- 2. Rare (Tier 2)
-    ["maki"] = "Rare", ["mika"] = "Rare",
-    ["goku"] = "Rare", ["goke"] = "Rare",
-    ["sakura"] = "Rare", ["sukora"] = "Rare",
-    ["mob"] = "Rare", ["mobi"] = "Rare", ["reigen"] = "Rare",
-    ["junwoo"] = "Rare", ["janwoo"] = "Rare",
-    ["choji"] = "Rare", ["soji"] = "Rare",
-
-    -- 3. Epic (Tier 3)
-    ["tanjiro"] = "Epic", ["tanjuro"] = "Epic",
-    ["shinra"] = "Epic", ["shinrat"] = "Epic",
-    ["guts"] = "Epic", ["got"] = "Epic",
-    ["manji"] = "Epic",
-    ["ban"] = "Epic", ["bon"] = "Epic",
-    ["piccolo"] = "Epic", ["picurro"] = "Epic",
-    ["renji"] = "Epic", ["rinnju"] = "Epic",
-    ["shikamaru"] = "Epic", ["shikamura"] = "Epic",
-
-    -- 4. Legendary (Tier 4)
-    ["erwin"] = "Legendary", ["erwon"] = "Legendary",
-    ["sukuna"] = "Legendary", ["sakuna"] = "Legendary",
-    ["gojo"] = "Legendary", ["goji"] = "Legendary",
-    ["naruto"] = "Legendary", ["noruto"] = "Legendary",
-    ["narutoclone"] = "Legendary", ["noruto clone"] = "Legendary",
-    ["summonertest"] = "Legendary",
-    ["saitama"] = "Legendary", ["saitomo"] = "Legendary",
-    ["trunks"] = "Legendary", ["truck"] = "Legendary",
-    ["grimmjow"] = "Legendary", ["grimmick"] = "Legendary",
-    ["zenitsu"] = "Legendary", ["zinichou"] = "Legendary",
-    ["nanami"] = "Legendary", ["nonomi"] = "Legendary",
-
-    -- 5. Mythic (Tier 5)
-    ["stark"] = "Mythic", ["coyote"] = "Mythic",
-    ["kokushibo"] = "Mythic", ["kokushiro"] = "Mythic",
-    ["simo hayha"] = "Mythic", ["shimo haya"] = "Mythic",
-    ["hoshina"] = "Mythic", ["hoshira"] = "Mythic",
-    ["ace"] = "Mythic", ["acer"] = "Mythic",
-    ["broly"] = "Mythic", ["brocolli"] = "Mythic",
-    ["orihime"] = "Mythic", ["orihemi"] = "Mythic",
-    ["rengoku"] = "Mythic", ["rengundam"] = "Mythic",
-    ["toji"] = "Mythic", ["joti"] = "Mythic",
-    ["kashimo"] = "Mythic", ["kashimi"] = "Mythic",
-    ["kakashi"] = "Mythic", ["kebashi"] = "Mythic",
-    ["tobi"] = "Mythic", ["tomi"] = "Mythic",
-    ["akaza"] = "Mythic", ["akazo"] = "Mythic",
-    ["kisuke"] = "Mythic", ["kiwusuke"] = "Mythic",
-    ["yoruichi"] = "Mythic", ["yoriki"] = "Mythic",
-
-    -- 6. Secret (Tier 6)
-    ["dio"] = "Secret", ["deyo"] = "Secret",
-    ["frieren"] = "Secret", ["fryren"] = "Secret",
-    ["yhwatch"] = "Secret", ["yhwach"] = "Secret", ["yuwah"] = "Secret",
-    ["jiren"] = "Secret", ["jerin"] = "Secret",
-    ["byakuya"] = "Secret", ["brakura"] = "Secret",
-    ["ulquiorra"] = "Secret", ["ulquiopta"] = "Secret",
-    ["kenpachi"] = "Secret", ["kenie"] = "Secret",
-    ["gyomei"] = "Secret", ["gyomain"] = "Secret",
-    ["megumi"] = "Secret", ["megumo"] = "Secret",
-    ["mahoraga"] = "Secret", ["mahorogo"] = "Secret",
-    ["yuta"] = "Secret", ["yutta"] = "Secret",
-    ["rika"] = "Secret", ["rikka"] = "Secret",
-    ["hakari"] = "Secret", ["hakuro"] = "Secret",
-    ["mojuro"] = "Secret", ["moru"] = "Secret",
-    ["sasuke"] = "Secret", ["susuko"] = "Secret",
-    ["naruto (six path)"] = "Secret", ["noruto (six realm)"] = "Secret",
-    ["naruto (six path) clone"] = "Secret", ["noruto (six realm) clone"] = "Secret",
-    ["douma"] = "Secret", ["duma"] = "Secret",
-    ["magellan"] = "Secret", ["magullan"] = "Secret",
-
-    -- 7. God (Tier 7)
-    ["beerus"] = "God", ["bills"] = "God",
-    ["rimuru"] = "God", ["remura"] = "God",
-    ["whis"] = "God", ["wise"] = "God",
-    ["yamamoto"] = "God", ["yamumoto"] = "God",
-    ["aizen (transcendent)"] = "God", ["aisen (divine)"] = "God",
-    ["ichigo"] = "God", ["isogo (true form)"] = "God", ["isogo"] = "God",
-    ["dabura"] = "God", ["daburo"] = "God",
-    ["madara"] = "God", ["madura"] = "God",
-    ["madara (clone)"] = "God", ["madura (clone)"] = "God",
-    ["hashirama"] = "God", ["hashyrama"] = "God",
-    ["yorichi"] = "God", ["yoichi"] = "God",
-    ["shanks"] = "God", ["shancks"] = "God",
-    ["ainz"] = "God", ["ais"] = "God",
-    ["death knight"] = "God",
-    ["gojo (shibuya)"] = "God", ["goji (shinjuku)"] = "God",
-    ["yuji (modulo)"] = "God", ["yujo (timeskip)"] = "God",
-    ["madara (six path)"] = "God", ["madura (six realms)"] = "God",
-    ["madara (limbo)"] = "God", ["madura (six realms) shadow"] = "God",
-    ["doflamingo"] = "God", ["flamingo"] = "God",
-    ["boros"] = "God", ["boris"] = "God",
-    ["boros v2"] = "God", ["boris (white)"] = "God",
-    ["goku (black)"] = "God", ["goki (black)"] = "God",
-    ["sukuna (heian)"] = "God", ["sakuna (heian)"] = "God",
-    ["muzan"] = "God", ["michael"] = "God",
-    ["muzan (evolved)"] = "God", ["michael (monster)"] = "God",
-
-    -- 8. Limited
-    ["entoma"] = "Limited", ["entomancer"] = "Limited",
-    ["spider (entoma)"] = "Limited",
-    ["hakari (jackpot)"] = "Limited", ["hakaru (jackpot!)"] = "Limited",
-    ["shalltear"] = "Limited", ["bloodtear"] = "Limited",
-    ["juuzou"] = "Limited", ["joozou"] = "Limited",
-    ["milim"] = "Limited", ["lilim"] = "Limited",
-    ["tatsumaki"] = "Limited", ["tazumaki"] = "Limited",
-    ["yugi"] = "Limited", ["yuwi"] = "Limited",
-    ["darkmagician"] = "Limited", ["purple magician"] = "Limited",
-    ["darkmagiciangirl"] = "Limited", ["purple magician girl"] = "Limited"
-}
-
--- Asynchronous Module Cache for Live In-Game Exact Data
-local CachedModuleRarities = {}
-task.spawn(function()
-    pcall(function()
-        local cInfoMod = ReplicatedStorage:WaitForChild("Modules", 3) 
-            and ReplicatedStorage.Modules:WaitForChild("Characters", 3) 
-            and ReplicatedStorage.Modules.Characters:WaitForChild("CharactersInfo", 3)
-        if cInfoMod then
-            local info = require(cInfoMod)
-            if type(info) == "table" then
-                local chars = info.Characters or info
-                for _, cData in pairs(chars) do
-                    if type(cData) == "table" then
-                        local r = cData.Rarity
-                        if r then
-                            if cData.Name then CachedModuleRarities[cData.Name:lower()] = tostring(r) end
-                            if cData.DisplayName then CachedModuleRarities[cData.DisplayName:lower()] = tostring(r) end
-                        end
-                    end
-                end
-            end
-        end
-    end)
-end)
-
-
--- Fast Number Formatting (e.g. 1,250,000)
-local function formatNumberWithCommas(amount)
-    local formatted = tostring(amount or "0"):gsub("[^%d]", "")
-    if formatted == "" then formatted = "0" end
-    local k
-    while true do
-        formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
-        if k == 0 then break end
-    end
-    return formatted
-end
-
--- Fast Direct Currency Scanner (Instant O(1))
-
-local RarityOrder = {
-    ["Common"]    = 1,
-    ["Rare"]      = 2,
-    ["Epic"]      = 3,
-    ["Legendary"] = 4,
-    ["Mythic"]    = 5,
-    ["Secret"]    = 6,
-    ["God"]       = 7,
-    ["Limited"]   = 8,
-    ["Godly"]     = 9,
-    ["Godlyx"]    = 10,
-    ["Divine"]    = 11,
-    ["Immortal"]  = 12,
-    ["OP"]        = 13,
-    ["OG"]        = 14,
-    ["INVASION"]  = 15
-}
-
-local function getMinRankFromRule(ruleString)
-    if not ruleString then return 1 end
-    if ruleString == "Common & Above (Buy All)" or ruleString == "Common & Above" or ruleString == "All Rarities" or ruleString == "All Units" then return 1
-    elseif ruleString == "Rare & Above" then return 2
-    elseif ruleString == "Epic & Above" then return 3
-    elseif ruleString == "Legendary & Above" then return 4
-    elseif ruleString == "Mythic & Above" then return 5
-    elseif ruleString == "Secret & Above" then return 6
-    elseif ruleString == "God & Above" then return 7
-    elseif ruleString == "Limited Only" then return 8
-    elseif ruleString == "Godly & Above" then return 9
-    elseif ruleString == "Godlyx & Above" then return 10
-    elseif ruleString == "Divine & Above" then return 11
-    elseif ruleString == "Immortal & Above" then return 12
-    elseif ruleString == "OP & Above" then return 13
-    elseif ruleString == "OG & Above" then return 14
-    elseif ruleString == "INVASION & Above" then return 15
-    end
-    return 1
-end
-
--- ══════════════════════════════════════════════════════════
--- 100% SAFE & GUARANTEED AUTO SELL ENGINE (MULTI-SOURCE SCAN + UUID & INSTANCE BUYER)
--- ══════════════════════════════════════════════════════════
-
-local throttledAutoSell = createThrottle(function()
-    Log("Info", "Executing Auto Sell scan...")
-    if not CharactersSell and not CharactersInv then
-        pcall(function()
-            CharactersSell = ReplicatedStorage:FindFirstChild("Remotes") 
-                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
-                and ReplicatedStorage.Remotes.Characters:FindFirstChild("Sell")
-            CharactersInv = ReplicatedStorage:FindFirstChild("Remotes") 
-                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
-                and ReplicatedStorage.Remotes.Characters:FindFirstChild("UpdateInventory")
-        end)
-    end
-
-    local function getUnitRarity(unitName, explicitRarity)
-        if explicitRarity and InGameRarities then
-            for _, rName in pairs(InGameRarities) do
-                if explicitRarity:lower() == rName:lower() then return rName end
-            end
-        end
-        local raw = tostring(unitName or ""):lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " ")
-        local nTrim = raw:match("^%s*(.-)%s*$") or ""
-        if nTrim == "" then return nil end
-
-        if CachedModuleRarities and CachedModuleRarities[nTrim] then return CachedModuleRarities[nTrim] end
-        if CharacterRarities and CharacterRarities[nTrim] then return CharacterRarities[nTrim] end
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if not playerGui then return end
         
-        if CharacterRarities then
-            for charKey, rVal in pairs(CharacterRarities) do
-                if nTrim == charKey or nTrim:find("^" .. charKey .. "$") or nTrim:find(charKey, 1, true) then
-                    return rVal
-                end
-            end
-        end
-        return nil
-    end
-
-    local function shouldSellItem(uName, explicitRarity, isLocked, mutation, trait, level)
-        if isLocked == true then return false end
-        if mutation and tostring(mutation):lower() ~= "none" and tostring(mutation) ~= "" and tostring(mutation):lower() ~= "nil" then return false end
-        if trait and tostring(trait):lower() ~= "none" and tostring(trait) ~= "" and tostring(trait):lower() ~= "nil" then return false end
-        if type(level) == "number" and level > 1 then return false end
-
-        local finalRarity = getUnitRarity(uName, explicitRarity)
-        if finalRarity and Config.SelectedSellRarities and Config.SelectedSellRarities[finalRarity] == true then
-            return true, finalRarity
-        end
-        return false, nil
-    end
-
-    local uuidsToSell = {}
-    local instancesToSell = {}
-    local namesToSell = {}
-    local seenUIDs = {}
-
-    -- 1. Scan DataService Profile Memory (Primary)
-    pcall(function()
-        local dataServMod = ReplicatedStorage:FindFirstChild("Data") and ReplicatedStorage.Data:FindFirstChild("DataService")
-        if dataServMod then
-            local ds = require(dataServMod)
-            local client = (type(ds) == "table" and (ds.client or ds.Client or ds)) or ds
-            
-            for _, key in ipairs({"Inventory", "Characters", "Units", "Bag"}) do
-                local rawList = nil
-                pcall(function() rawList = client:get(LocalPlayer, {key}) end)
-                if not rawList then pcall(function() rawList = client:get({key}) end) end
-                if not rawList then pcall(function() rawList = ds:get(LocalPlayer, {key}) end) end
-                if not rawList and client.Data then rawList = client.Data[key] end
-                if not rawList and client.Profile then rawList = client.Profile[key] end
-                if not rawList and client._data then rawList = (client._data._data and client._data._data[key]) or client._data[key] end
-                if not rawList and ds._data then rawList = (ds._data._data and ds._data._data[key]) or ds._data[key] end
-
-                if type(rawList) == "table" then
-                    for _, item in pairs(rawList) do
-                        if type(item) == "table" then
-                            local uid = item.UUID or item.Uuid or item.Id or item.uid
-                            local uName = item.Name or item.CharacterName or item.UnitName or ""
-                            local isLocked = item.isLocked == true or item.Locked == true or item.IsLocked == true
-                            local mut = item.Mutation or item.Variant
-                            local trait = item.Trait or item.Traits
-                            local lvl = item.Level or item.Lvl
-                            local rStr = item.Rarity or item.Tier
-
-                            local sellOk, _ = shouldSellItem(uName, rStr, isLocked, mut, trait, lvl)
-                            if sellOk and uid and not seenUIDs[uid] then
-                                seenUIDs[uid] = true
-                                table.insert(uuidsToSell, uid)
-                                table.insert(namesToSell, uName)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end)
-
-    -- 2. Scan LocalPlayer Data / PlayerData Folders
-    pcall(function()
-        for _, fName in ipairs({"Data", "PlayerData", "Inventory", "Characters"}) do
-            local df = LocalPlayer:FindFirstChild(fName)
-            if df then
-                local invFolder = df:FindFirstChild("Inventory") or df:FindFirstChild("Characters") or df
-                for _, item in ipairs(invFolder:GetChildren()) do
-                    if item:IsA("Instance") and item.Name ~= "Terrain" then
-                        local uid = item:GetAttribute("UUID") or item:GetAttribute("Uuid") or item:GetAttribute("Id") or item.Name
-                        local uName = item:GetAttribute("CharacterName") or item:GetAttribute("Name") or item.Name
-                        local isLocked = item:GetAttribute("Locked") == true or item:GetAttribute("isLocked") == true
-                        local mut = item:GetAttribute("Mutation") or item:GetAttribute("Variant")
-                        local trait = item:GetAttribute("Trait")
-                        local lvl = item:GetAttribute("Level") or item:GetAttribute("Lvl")
-                        local rStr = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
-
-                        local sellOk, _ = shouldSellItem(uName, rStr, isLocked, mut, trait, lvl)
-                        if sellOk then
-                            if uid and not seenUIDs[uid] then
-                                seenUIDs[uid] = true
-                                table.insert(uuidsToSell, uid)
-                            end
-                            table.insert(instancesToSell, item)
-                            table.insert(namesToSell, uName)
-                        end
-                    end
-                end
-            end
-        end
-    end)
-
-    -- 3. Execute Multi-Format Selling
-    if #uuidsToSell > 0 then
-        if CharactersSell then
-            pcall(function() CharactersSell:FireServer(uuidsToSell) end)
-            pcall(function() CharactersSell:FireServer({ UUIDs = uuidsToSell }) end)
-            pcall(function() CharactersSell:FireServer("Sell", uuidsToSell) end)
-            for _, uid in ipairs(uuidsToSell) do
-                pcall(function() CharactersSell:FireServer(uid) end)
-                pcall(function() CharactersSell:FireServer({ UUID = uid }) end)
-            end
-        end
-        if CharactersInv then
-            pcall(function() CharactersInv:FireServer("Sell", uuidsToSell) end)
-            pcall(function() CharactersInv:FireServer("SellUnits", uuidsToSell) end)
-        end
-    end
-
-    if #instancesToSell > 0 and CharactersSell then
-        for _, inst in ipairs(instancesToSell) do
-            pcall(function() CharactersSell:FireServer(inst) end)
-            pcall(function() CharactersSell:FireServer(inst.Name) end)
-        end
-    end
-    if #uuidsToSell > 0 then
-        Log("Success", "Sold %d units for Gold!", #uuidsToSell)
-    end
-end, 2.5)
-
-local function executeAutoSell()
-    throttledAutoSell()
-end
-
--- ══════════════════════════════════════════════════════════
--- OFFICIAL CHARACTER PRICES & MUTATION MULTIPLIERS
--- ══════════════════════════════════════════════════════════
-
-local CharacterPrices = {
-    ["zero"] = 200, ["zoro"] = 200, ["krillin"] = 200, ["keririn"] = 200,
-    ["luffy"] = 275, ["luppi"] = 275, ["ussop"] = 300, ["usopp"] = 300, ["usoff"] = 300,
-    ["itadori"] = 500, ["itadoro"] = 500, ["rock lee"] = 750, ["rocklee"] = 750, ["solid lei"] = 750,
-    ["maki"] = 1000, ["mika"] = 1000, ["goku"] = 1000, ["goke"] = 1000,
-    ["mob"] = 1200, ["mobi"] = 1200, ["reigen"] = 1200,
-    ["junwoo"] = 1800, ["janwoo"] = 1800, ["sakura"] = 1800, ["sukora"] = 1800,
-    ["choji"] = 3500, ["soji"] = 3500,
-    ["shinra"] = 4200, ["shinrat"] = 4200, ["ban"] = 4500, ["bon"] = 4500,
-    ["tanjiro"] = 4800, ["tanjuro"] = 4800, ["manji"] = 5200,
-    ["guts"] = 6000, ["got"] = 6000, ["renji"] = 7000, ["rinnju"] = 7000,
-    ["piccolo"] = 7800, ["picurro"] = 7800, ["shikamaru"] = 10000, ["shikamura"] = 10000,
-    ["saitama"] = 16000, ["saitomo"] = 16000, ["sukuna"] = 17500, ["sakuna"] = 17500,
-    ["gojo"] = 18000, ["goji"] = 18000, ["erwin"] = 20000, ["erwon"] = 20000,
-    ["naruto"] = 24000, ["noruto"] = 24000, ["summonertest"] = 24000,
-    ["trunks"] = 36000, ["truck"] = 36000,
-    ["akaza"] = 50500, ["akazo"] = 50500, ["entoma"] = 50000, ["entomancer"] = 50000,
-    ["stark"] = 60000, ["coyote"] = 60000, ["kokushibo"] = 70000, ["kokushiro"] = 70000,
-    ["simo hayha"] = 75000, ["shimo haya"] = 75000, ["hoshina"] = 80000, ["hoshira"] = 80000,
-    ["ace"] = 85000, ["acer"] = 85000, ["grimmjow"] = 85000, ["grimmick"] = 85000,
-    ["zenitsu"] = 120000, ["zinichou"] = 120000, ["broly"] = 127500, ["brocolli"] = 127500,
-    ["nanami"] = 200000, ["nonomi"] = 200000, ["orihime"] = 200000, ["orihemi"] = 200000,
-    ["dio"] = 200000, ["deyo"] = 200000, ["rengoku"] = 250000, ["rengundam"] = 250000,
-    ["frieren"] = 275000, ["fryren"] = 275000, ["yhwatch"] = 310000, ["yuwah"] = 310000,
-    ["toji"] = 350000, ["joti"] = 350000, ["kisuke"] = 350000, ["kiwusuke"] = 350000,
-    ["yoruichi"] = 375000, ["yoriki"] = 375000, ["kashimo"] = 450000, ["kashimi"] = 450000,
-    ["jiren"] = 450000, ["jerin"] = 450000,
-    ["kakashi"] = 650000, ["kebashi"] = 650000, ["tobi"] = 650000, ["tomi"] = 650000,
-    ["beerus"] = 650000, ["bills"] = 650000, ["byakuya"] = 700000, ["brakura"] = 700000,
-    ["ulquiorra"] = 750000, ["ulquiopta"] = 750000, ["rimuru"] = 750000, ["remura"] = 750000,
-    ["whis"] = 1125000, ["wise"] = 1125000, ["kenpachi"] = 1125000, ["kenie"] = 1125000,
-    ["gyomei"] = 1500000, ["gyomain"] = 1500000, ["yamamoto"] = 1750000, ["yamumoto"] = 1750000,
-    ["megumi"] = 2500000, ["megumo"] = 2500000, ["yuta"] = 3100000, ["yutta"] = 3100000,
-    ["aizen (transcendent)"] = 3500000, ["aisen (divine)"] = 3500000,
-    ["hakari"] = 3900000, ["hakuro"] = 3900000, ["ichigo"] = 4000000, ["isogo (true form)"] = 4000000,
-    ["mojuro"] = 4500000, ["moru"] = 4500000, ["sasuke"] = 5000000, ["susuko"] = 5000000,
-    ["dabura"] = 6000000, ["daburo"] = 6000000, ["madara"] = 7500000, ["madura"] = 7500000,
-    ["hashirama"] = 7500000, ["hashyrama"] = 7500000
-}
-
-local MutationPriceMultipliers = {
-    ["gold"]       = 2,
-    ["diamond"]    = 5,
-    ["demon"]      = 10,
-    ["destroyer"]  = 15,
-    ["hollow"]     = 20,
-    ["slayer"]     = 25,
-    ["cursed"]     = 30,
-    ["astronaut"]  = 1
-}
-
-local function getCharacterCost(cleanName, mutStr)
-    local base = CharacterPrices[cleanName] or 200
-    local mult = 1
-    if mutStr and mutStr ~= "" then
-        for mKey, mVal in pairs(MutationPriceMultipliers) do
-            if mutStr:find(mKey) then
-                mult = mVal
-                break
-            end
-        end
-    end
-    return base * mult
-end
-
-
-local function parseFormattedNumber(val)
-    if type(val) == "number" then return val end
-    if not val then return 0 end
-    local str = tostring(val):gsub(",", ""):match("^%s*(.-)%s*$") or "0"
-    local num, suffix = str:match("([%d%.]+)%s*([KkMmBbTtQq]?)")
-    local n = tonumber(num) or 0
-    if suffix then
-        local s = suffix:upper()
-        if s == "K" then n = n * 1e3
-        elseif s == "M" then n = n * 1e6
-        elseif s == "B" then n = n * 1e9
-        elseif s == "T" then n = n * 1e12
-        elseif s == "Q" then n = n * 1e15
-        end
-    end
-    return n
-end
-
-
-
-local function getCurrentPlayerGold()
-    -- 1. Direct DataServiceClient Live Memory Access
-    local dsGold = nil
-    pcall(function()
-        local dsClientMod = ReplicatedStorage:FindFirstChild("Data") 
-            and ReplicatedStorage.Data:FindFirstChild("DataService") 
-            and (ReplicatedStorage.Data.DataService:FindFirstChild("DataServiceClient") or ReplicatedStorage.Data.DataService:FindFirstChild("Data"))
-        if dsClientMod then
-            local ds = require(dsClientMod)
-            if type(ds) == "table" then
-                if ds._data and type(ds._data) == "table" then
-                    if ds._data._data and type(ds._data._data.Gold) == "number" then
-                        dsGold = ds._data._data.Gold
-                    elseif type(ds._data.Gold) == "number" then
-                        dsGold = ds._data.Gold
-                    end
-                elseif ds.client and ds.client._data and type(ds.client._data._data) == "table" and type(ds.client._data._data.Gold) == "number" then
-                    dsGold = ds.client._data._data.Gold
-                elseif type(ds.Gold) == "number" then
-                    dsGold = ds.Gold
-                end
-            end
-        end
-    end)
-    if dsGold and type(dsGold) == "number" and dsGold >= 0 then
-        return dsGold
-    end
-
-    -- 2. Direct ReplicatedStorage DataService Client get()
-    pcall(function()
-        local dsMod = ReplicatedStorage:FindFirstChild("Data") and ReplicatedStorage.Data:FindFirstChild("DataService")
-        if dsMod then
-            local ds = require(dsMod)
-            local client = (type(ds) == "table" and (ds.client or ds.Client or ds)) or ds
-            if client and client.get then
-                local res = client:get(LocalPlayer, {"Gold"}) or client:get({"Gold"})
-                if type(res) == "number" then dsGold = res end
-            end
-        end
-    end)
-    if dsGold and type(dsGold) == "number" and dsGold >= 0 then
-        return dsGold
-    end
-
-    -- 3. LocalPlayer Data / leaderstats ValueBase
-    for _, fName in ipairs({"Data", "leaderstats", "PlayerData", "Stats"}) do
-        local dFolder = LocalPlayer:FindFirstChild(fName)
-        if dFolder then
-            for _, gName in ipairs({"Gold", "Coins", "Money", "Cash"}) do
-                local gVal = dFolder:FindFirstChild(gName)
-                if gVal and gVal:IsA("ValueBase") and tonumber(gVal.Value) ~= nil then
-                    return tonumber(gVal.Value)
-                end
-            end
-        end
-    end
-
-    -- 4. Strictly Scoped TopBar HUD TextLabel (Excludes Shop, Products, Gamepasses, Upgrades)
-    local pGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if pGui then
-        for _, gui in ipairs(pGui:GetChildren()) do
+        for _, gui in ipairs(playerGui:GetChildren()) do
             if gui:IsA("ScreenGui") and gui.Name ~= "CUPIEUI" and gui.Enabled then
-                local gName = gui.Name:lower()
-                if not gName:find("shop") and not gName:find("pass") and not gName:find("product") and not gName:find("upgr") and not gName:find("trade") then
-                    for _, lbl in ipairs(gui:GetDescendants()) do
-                        if lbl:IsA("TextLabel") and lbl.Visible then
-                            local lName = lbl.Name:lower()
-                            local pName = (lbl.Parent and lbl.Parent.Name:lower()) or ""
-                            if not pName:find("shop") and not pName:find("product") and not pName:find("cost") and not pName:find("price") then
-                                if (lName == "gold" or lName == "coins" or lName == "money" or pName == "gold" or pName == "coins") and lbl.Text:match("%d") then
-                                    local parsed = parseFormattedNumber(lbl.Text)
-                                    if parsed >= 0 then return parsed end
-                                end
+                for _, child in ipairs(gui:GetDescendants()) do
+                    if child:IsA("TextLabel") or child:IsA("Frame") or child:IsA("ImageLabel") then
+                        local name = child.Name:lower()
+                        local text = child:IsA("TextLabel") and child.Text:lower() or ""
+                        local pName = (child.Parent and child.Parent.Name:lower()) or ""
+                        
+                        local isPopup = (
+                            name:find("popup") or 
+                            name:find("notif") or 
+                            name:find("toast") or
+                            name:find("alert") or
+                            name:find("message") or
+                            text:find("rolled") or
+                            text:find("claimed") or
+                            text:find("reward") or
+                            text:find("success") or
+                            pName:find("popup") or
+                            pName:find("notif") or
+                            pName:find("toast") or
+                            pName:find("alert")
+                        )
+                        
+                        local isProtected = (
+                            pName:find("shop") or
+                            pName:find("pass") or
+                            pName:find("upgrade") or
+                            pName:find("gold") or
+                            pName:find("hud") or
+                            pName:find("currency") or
+                            pName:find("stat")
+                        )
+                        
+                        if isPopup and not isProtected then
+                            if child:IsA("TextLabel") then
+                                child.Visible = false
+                                child.TextTransparency = 1
+                            elseif child:IsA("Frame") or child:IsA("ImageLabel") then
+                                child.Visible = false
                             end
                         end
                     end
                 end
             end
         end
-    end
-
-    return 0
-end
-
-
-local function getStandTargetInfo(model)
-    if not model or not model:IsA("Model") then return nil end
-    local uName = model.Name
-    local cleanName = uName:lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
-    
-    local foundRarity = nil
-    local foundMutation = nil
-    local foundPrice = nil
-    local foundCharName = nil
-
-    for _, desc in ipairs(model:GetDescendants()) do
-        if desc:IsA("TextLabel") and desc.Visible then
-            local txt = desc.Text:lower():match("^%s*(.-)%s*$") or ""
-            
-            -- Read Price from Billboard (e.g. "$400", "$1,200", "$350K")
-            local priceMatch = desc.Text:match("%$%s*([%d%,%.%a]+)") or desc.Text:match("([%d%,%.%a]+)%s*[Gg]old")
-            if priceMatch then
-                foundPrice = parseFormattedNumber(priceMatch)
-            end
-
-            -- Read Mutation from Billboard
-            if txt:find("gold") then foundMutation = "Gold"
-            elseif txt:find("diamond") then foundMutation = "Diamond"
-            elseif txt:find("astronaut") or txt:find("cosmic") then foundMutation = "Astronaut"
-            elseif txt:find("demon") then foundMutation = "Demon"
-            elseif txt:find("destroyer") then foundMutation = "Destroyer"
-            elseif txt:find("hollow") then foundMutation = "Hollow"
-            elseif txt:find("slayer") then foundMutation = "Slayer"
-            elseif txt:find("cursed") then foundMutation = "Cursed"
-            end
-            
-            -- Read Rarity from Billboard
-            if InGameRarities then
-                for _, rName in pairs(InGameRarities) do
-                    if txt == rName:lower() or txt:find("^" .. rName:lower() .. "$") or txt:find(rName:lower()) then
-                        foundRarity = rName
-                        break
-                    end
-                end
-            end
-            
-            if CharacterRarities and (CharacterRarities[txt] or CharacterRarities[txt:gsub("[%[%]%(%)%_%-%.%#]", "")]) then
-                foundCharName = txt
-            end
-        end
-    end
-
-    local attrR = model:GetAttribute("Rarity") or model:GetAttribute("Tier")
-    local finalRarity = foundRarity or attrR or (foundCharName and CharacterRarities and CharacterRarities[foundCharName]) or (CharacterRarities and CharacterRarities[cleanName]) or (CachedModuleRarities and CachedModuleRarities[cleanName]) or "Common"
-    
-    local attrM = model:GetAttribute("Mutation") or model:GetAttribute("Mutations") or model:GetAttribute("Variant")
-    local mutChild = model:FindFirstChild("Mutation") or model:FindFirstChild("Gold") or model:FindFirstChild("Diamond") or model:FindFirstChild("Astronaut")
-    local finalMutation = foundMutation or (attrM and tostring(attrM)) or (mutChild and mutChild.Name) or (model.Name:lower():find("gold") and "Gold") or (model.Name:lower():find("astronaut") and "Astronaut") or nil
-
-    local cost = foundPrice or getCharacterCost(cleanName, finalMutation)
-    local prompt = model:FindFirstChildWhichIsA("ProximityPrompt", true)
-
-    return {
-        Model = model,
-        Name = uName,
-        CleanName = cleanName,
-        Rarity = finalRarity,
-        Mutation = finalMutation,
-        Cost = cost,
-        Prompt = prompt
-    }
-end
-
-
-
--- ══════════════════════════════════════════════════════════
--- DEDICATED STAND TARGET DISCOVERY & BUY ENGINE
--- ══════════════════════════════════════════════════════════
-
-local function checkUnitMatchesFilter(unitName, unitRarity, unitMutation)
-    local rPass = false
-    local mPass = false
-
-    -- 1. Check Multi-Selected Rarities
-    if Config.SelectedBuyRarities and type(Config.SelectedBuyRarities) == "table" then
-        for rName, enabled in pairs(Config.SelectedBuyRarities) do
-            if enabled and unitRarity and (unitRarity:lower() == rName:lower() or unitRarity:lower():find(rName:lower())) then
-                rPass = true
-                break
-            end
-        end
-    end
-
-    -- 2. Check Multi-Selected Mutations
-    local mutStr = tostring(unitMutation or ""):lower()
-    if mutStr ~= "" and mutStr ~= "nil" and mutStr ~= "none" then
-        if Config.SelectedBuyMutations and type(Config.SelectedBuyMutations) == "table" then
-            for mName, enabled in pairs(Config.SelectedBuyMutations) do
-                if enabled and (mutStr:find(mName:lower()) or (mName:lower() == "astronaut" and mutStr:find("cosmic"))) then
-                    mPass = true
-                    break
-                end
-            end
-        end
-    end
-
-    local anyRaritySelected = false
-    if Config.SelectedBuyRarities then
-        for _, v in pairs(Config.SelectedBuyRarities) do if v then anyRaritySelected = true break end end
-    end
-    local anyMutationSelected = false
-    if Config.SelectedBuyMutations then
-        for _, v in pairs(Config.SelectedBuyMutations) do if v then anyMutationSelected = true break end end
-    end
-
-    if anyRaritySelected and anyMutationSelected then
-        return rPass or mPass
-    elseif anyRaritySelected then
-        return rPass
-    elseif anyMutationSelected then
-        return mPass
-    else
-        return true
-    end
-end
-
-local function getMatchingStandTargets()
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    local myPlot = getMyPlot()
-
-    local candidateModels = {}
-    if myPlot then
-        local charFolder = myPlot:FindFirstChild("Characters") or myPlot:FindFirstChild("Stands") or myPlot:FindFirstChild("Roll")
-        if charFolder then
-            for _, m in ipairs(charFolder:GetChildren()) do
-                if m:IsA("Model") and m ~= char then
-                    table.insert(candidateModels, m)
-                end
-            end
-        end
-    end
-    
-    if #candidateModels == 0 and root then
-        for _, m in ipairs(Workspace:GetChildren()) do
-            if m:IsA("Model") and m ~= char and m.Name ~= "Terrain" then
-                local mRoot = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
-                if mRoot and (mRoot.Position - root.Position).Magnitude < 45 then
-                    table.insert(candidateModels, m)
-                end
-            end
-        end
-        local plots = Workspace:FindFirstChild("Plots")
-        if plots then
-            for _, p in ipairs(plots:GetChildren()) do
-                local cFolder = p:FindFirstChild("Characters") or p:FindFirstChild("Stands")
-                if cFolder then
-                    for _, m in ipairs(cFolder:GetChildren()) do
-                        if m:IsA("Model") and m ~= char then
-                            local mRoot = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
-                            if mRoot and (mRoot.Position - root.Position).Magnitude < 45 then
-                                table.insert(candidateModels, m)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    table.sort(candidateModels, function(a, b)
-        local pA = a:GetPivot().Position
-        local pB = b:GetPivot().Position
-        return (pA.X + pA.Z) < (pB.X + pB.Z)
     end)
-
-    local matching = {}
-    for slotIdx, model in ipairs(candidateModels) do
-        local info = getStandTargetInfo(model)
-        if info and checkUnitMatchesFilter(info.Name, info.Rarity, info.Mutation) then
-            info.SlotIdx = slotIdx
-            table.insert(matching, info)
-        end
-    end
-    return matching
 end
-
-local function buyStandTarget(target)
-    if not target or not target.Model or not target.Model.Parent then return end
-    
-    -- STRICT HARD GUARD: NEVER fire prompt or remote if player does not have enough Gold!
-    local curGold = getCurrentPlayerGold()
-    local cost = target.Cost or 200
-    if curGold < cost then
-        return false
-    end
-    
-    if not CharactersBuy then
-        pcall(function()
-            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
-                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
-                and ReplicatedStorage.Remotes.Characters:FindFirstChild("Buy")
-        end)
-    end
-
-    if target.Prompt then
-        pcall(function()
-            target.Prompt.MaxActivationDistance = 999999
-            target.Prompt.RequiresLineOfSight = false
-            target.Prompt.HoldDuration = 0
-        end)
-        if fireproximityprompt then
-            pcall(function() fireproximityprompt(target.Prompt, 1) end)
-            pcall(function() fireproximityprompt(target.Prompt, 0) end)
-            pcall(function() fireproximityprompt(target.Prompt) end)
-        end
-        if target.Prompt.InputHoldBegin then
-            pcall(function()
-                target.Prompt:InputHoldBegin()
-                task.wait(0.01)
-                target.Prompt:InputHoldEnd()
-            end)
-        end
-    end
-    
-    if CharactersBuy then
-        for tier = 1, 4 do
-            pcall(function() CharactersBuy:FireServer(tier, target.SlotIdx) end)
-            pcall(function() CharactersBuy:FireServer(tier, 1) end)
-            pcall(function() CharactersBuy:FireServer(tier, 2) end)
-            pcall(function() CharactersBuy:FireServer(tier, 3) end)
-        end
-    end
-end
-
-local function executeSmartAutoBuy()
-    local targets = getMatchingStandTargets()
-    for _, target in ipairs(targets) do
-        local curGold = getCurrentPlayerGold()
-        local cost = target.Cost or 200
-        if curGold >= cost then
-            buyStandTarget(target)
-            task.wait(0.08)
-        end
-    end
-    return #targets
-end
-
-
--- Auto Upgrade Stats Loop (Verified from foranimell.lua: Upgrade:FireServer("Gold", "Luck" / "Inventory" / "Gold" / "Slots"))
-local function executeStatUpgrades()
-    if not GeneralUpgrade then return end
-    if Config.AutoUpgradeLuck then
-        pcall(function() GeneralUpgrade:FireServer("Gold", "Luck") end)
-    end
-    if Config.AutoUpgradeInventory then
-        pcall(function() GeneralUpgrade:FireServer("Gold", "Inventory") end)
-    end
-    if Config.AutoUpgradeGold then
-        pcall(function() GeneralUpgrade:FireServer("Gold", "Gold") end)
-    end
-    if Config.AutoUpgradeSlots then
-        pcall(function() GeneralUpgrade:FireServer("Gold", "Slots") end)
-    end
-end
-
--- Anti-AFK Handler
-pcall(function()
-    if getconnections and LocalPlayer then
-        for _, conn in ipairs(getconnections(LocalPlayer.Idled)) do
-            if conn.Disable then conn:Disable()
-            elseif conn.Disconnect then conn:Disconnect() end
-        end
-    end
-    if LocalPlayer then
-        LocalPlayer.Idled:Connect(function()
-            if Config.AntiAFK and VirtualUser then
-                pcall(function()
-                    local cam = workspace.CurrentCamera
-                    local cf = cam and cam.CFrame or CFrame.new()
-                    VirtualUser:Button2Down(Vector2.new(0, 0), cf)
-                    task.wait(0.2)
-                    VirtualUser:Button2Up(Vector2.new(0, 0), cf)
-                end)
-            end
-        end)
-    end
-end)
-
--- Noclip Stepped Handler
-Cupie:AddConnection(RunService.Stepped:Connect(function()
-    if Config.Noclip then
-        local char = LocalPlayer.Character
-        if char then
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") and part.CanCollide then
-                    part.CanCollide = false
-                end
-            end
-        end
-    end
-end))
-
--- ══════════════════════════════════════════════════════════
--- CREATE WINDOW
--- ══════════════════════════════════════════════════════════
-local Window = Cupie:CreateWindow({
-    Title    = "CUPIE HUB",
-    Subtitle = "Roll Anime To Fight - v1.0",
-    Keybind  = Enum.KeyCode.RightControl
-})
-
--- ══════════════════════════════════════════════════════════
--- TAB 1: DASHBOARD & STATS (GOLD HIGHLIGHT & RARITY INVENTORY ONLY)
--- ══════════════════════════════════════════════════════════
-local DashTab = Window:CreateTab("Stats", 1)
-
-DashTab:CreateHeader("GOLD & TREASURY", 1)
-
--- Highlighted Gold Balance Card
-local goldPara = DashTab:CreateParagraph({
-    Title = "GOLD BALANCE",
-    Content = "Scanning Gold balance...",
-    LayoutOrder = 2
-})
-
-DashTab:CreateHeader("OTHER CURRENCIES & SESSION", 3)
-
-local curPara = DashTab:CreateParagraph({
-    Title = "Account Currencies",
-    Content = "Scanning currencies...",
-    LayoutOrder = 4
-})
-
-DashTab:CreateHeader("CHARACTER INVENTORY BY RARITY", 5)
-
-local invRarityPara = DashTab:CreateParagraph({
-    Title = "Owned Characters Breakdown",
-    Content = "Scanning character inventory...",
-    LayoutOrder = 6
-})
-
-DashTab:CreateHeader("CHARACTER MUTATIONS (SPECIAL VARIANTS)", 7)
-
-local mutPara = DashTab:CreateParagraph({
-    Title = "Owned Mutations (0 Total)",
-    Content = "Scanning mutations...",
-    LayoutOrder = 8
-})
-
--- ══════════════════════════════════════════════════════════
--- INSTANT REAL-TIME STATS & INVENTORY ENGINE (ZERO-LAG)
--- ══════════════════════════════════════════════════════════
 
 -- Known Character Rarity Dictionary (Instant O(1) Lookup, No require hang)
 -- ══════════════════════════════════════════════════════════
@@ -3474,6 +2512,7 @@ GachaTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoRoll = state
+        saveConfig()
         if state then
             smoothPositionToRollPad()
             Cupie:StartLoop("AutoRollLoop", 0.3, function()
@@ -3565,6 +2604,7 @@ GachaTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoBuyByRarity = state
+        saveConfig()
         if state then
             Cupie:StartLoop("AutoBuyRarityLoop", 0.5, function()
                 if not Config.AutoRoll then
@@ -3593,6 +2633,7 @@ GachaTab:CreateMultiDropdown({
     Default = Config.SelectedSellRarities,
     Callback = function(selMap)
         Config.SelectedSellRarities = selMap
+        saveConfig()
     end
 })
 
@@ -3603,6 +2644,7 @@ GachaTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoSellLowTier = state
+        saveConfig()
         if state then
             Cupie:StartLoop("AutoSellLoop", 2.0, function()
                 executeAutoSell()
@@ -3620,6 +2662,7 @@ GachaTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoSpinWheel = state
+        saveConfig()
         if state then
             cleanAllExistingNotifications()
             Cupie:StartLoop("AutoSpinLoop", 3.5, function()
@@ -3642,6 +2685,7 @@ GachaTab:CreateToggle({
     Default = true,
     Callback = function(state)
         Config.HideNotifications = state
+        saveConfig()
         if state then cleanAllExistingNotifications() end
     end
 })
@@ -3668,6 +2712,7 @@ UpgradeTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoEquipBest = state
+        saveConfig()
         if state then
             triggerEquipBest()
             Cupie:StartLoop("AutoEquipBestLoop", 1.5, function() triggerEquipBest() end)
@@ -3684,6 +2729,7 @@ UpgradeTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoLevelUp = state
+        saveConfig()
         if state then
             Cupie:StartLoop("AutoLevelUpLoop", 1.0, function()
                 if CharactersLevelUp then CharactersLevelUp:FireServer() end
@@ -3701,6 +2747,7 @@ UpgradeTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoEvolve = state
+        saveConfig()
         if state then
             Cupie:StartLoop("AutoEvolveLoop", 3.0, function()
                 if EvolutionRemote then EvolutionRemote:FireServer({}) end
@@ -3720,6 +2767,7 @@ UpgradeTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoUpgradeStats = state
+        saveConfig()
         if state then
             Cupie:StartLoop("AutoStatsLoop", 1.0, function()
                 executeStatUpgrades()
@@ -3747,6 +2795,7 @@ UpgradeTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoTraitReroll = state
+        saveConfig()
         if state then
             Cupie:StartLoop("AutoTraitLoop", 0.5, function()
                 if TraitRemote then TraitRemote:FireServer() end
@@ -3840,6 +2889,7 @@ CombatTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoFight = state
+        saveConfig()
         if state then
             Cupie:StartLoop("AutoFightLoop", 1.5, function()
                 if FightStart then FightStart:FireServer("AutoPlay") end
@@ -3859,6 +2909,7 @@ CombatTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.FastAttackAura = state
+        saveConfig()
         if state then
             Cupie:StartLoop("AutoAttackLoop", Config.AttackSpeed, function()
                 if FlexAttack then FlexAttack:FireServer() end
@@ -3944,6 +2995,7 @@ MiscTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoClaimBP = state
+        saveConfig()
         if state then
             Cupie:StartLoop("AutoBPLoop", 2.5, function()
                 if BPGetQuestData then BPGetQuestData:InvokeServer() end
@@ -3963,6 +3015,7 @@ MiscTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoFreeRewards = state
+        saveConfig()
         if state then
             Cupie:StartLoop("FreeRewardsLoop", 8.0, function()
                 if FreeGroupRemote then FreeGroupRemote:FireServer() end

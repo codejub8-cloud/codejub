@@ -1854,57 +1854,56 @@ local Config = {
     },
     SelectedBuyMutations = {
         ["Gold"]      = true,
-        ["Astronaut"] = true
+        ["Astronaut"] = true,
+        ["Diamond"]   = true,
+        ["Demon"]     = true,
+        ["Destroyer"] = true,
+        ["Hollow"]    = true,
+        ["Slayer"]    = true,
+        ["Cursed"]    = true
     },
     BuyRuleTier         = "All Tiers",
+    
+    -- Auto Sell Rarities (Multi-Select)
+    SelectedSellRarities = {
+        ["Common"]    = true,
+        ["Rare"]      = true,
+        ["Epic"]      = false,
+        ["Legendary"] = false,
+        ["Mythic"]    = false,
+        ["Secret"]    = false,
+        ["God"]       = false,
+        ["Limited"]   = false
+    },
     
     -- Auto Sell Rarity Selection
     AutoSellLowTier     = false,
     SellThreshold       = "Common Only",
     
-    -- Auto Lock Rarity Selection
-    AutoLockRareUnits   = true,
-    LockMinRarity       = "Legendary & Above",
+    -- Auto Pickup
+    AutoPickupAll       = false,
     
-    -- Target Stop Filter
-    TargetRarityFilter  = false,
-    StopRarityTarget    = "Mythic & Above",
-    
-    -- Wheel & Popups
-    AutoSpinWheel       = false,
-    HideNotifications   = false,
-    
-    -- Dashboard & Progression Toggles (Equip, Level, Evolve, Stats)
+    -- Team Progression
     AutoEquipBest       = false,
     AutoLevelUp         = false,
     AutoEvolve          = false,
     AutoUpgradeStats    = false,
-    AutoUpgradeLuck     = true,
-    AutoUpgradeInventory= true,
-    AutoUpgradeGold     = true,
-    AutoUpgradeSlots    = true,
     AutoTraitReroll     = false,
     
-    -- Factions & NPC Tickets
-    AutoFactionQuests   = false,
-    AutoBuyNPCTickets   = false,
-    
-    -- Shop Direct
-    AutoBuyTier         = false,
-    SelectedTier        = 1,
-    SelectedSlot        = "All Slots",
-    
-    -- Combat
+    -- Combat & Farming
     AutoFight           = false,
     FastAttackAura      = false,
     AttackSpeed         = 0.08,
     AutoWaveSkip        = true,
     
-    -- Quests & Free
+    -- Quests & Rewards
     AutoClaimBP         = false,
     AutoFreeRewards     = false,
+    AutoFactionQuests   = false,
+    AutoSpinWheel       = false,
+    HideNotifications   = true,
     
-    -- LocalPlayer & QoL
+    -- Player Mods
     WalkSpeed           = 16,
     JumpPower           = 50,
     InfJump             = false,
@@ -3955,6 +3954,24 @@ CombatTab:CreateButton({
 -- ══════════════════════════════════════════════════════════
 local MiscTab = Window:CreateTab("Misc", 5)
 MiscTab:CreateHeader("Quests, Factions & Free Rewards", 1)
+
+MiscTab:CreateToggle({
+    Name = "Auto Faction Quests",
+    Description = "Continuously requests faction quest data and scores",
+    Default = false,
+    Callback = function(state)
+        Config.AutoFactionQuests = state
+        saveConfig()
+        if state then
+            Cupie:StartLoop("AutoFactionLoop", 5.0, function()
+                autoFactionQuests()
+            end)
+        else
+            Cupie:StopLoop("AutoFactionLoop")
+        end
+    end
+})
+
 
 MiscTab:CreateToggle({
     Name = "Auto Claim Battlepass Quests",

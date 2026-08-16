@@ -2016,69 +2016,95 @@ local function getMinRankFromRule(ruleString)
 end
 
 -- ══════════════════════════════════════════════════════════
--- 100% SAFE & PRECISE AUTO SELL / DELETE ENGINE (WHITELIST FILTER ONLY)
+-- 100% SAFE & GUARANTEED AUTO SELL ENGINE (MULTI-SOURCE SCAN + UUID & INSTANCE BUYER)
 -- ══════════════════════════════════════════════════════════
 
 local function executeAutoSell()
-    if not CharactersSell then
+    if not CharactersSell and not CharactersInv then
         pcall(function()
             CharactersSell = ReplicatedStorage:FindFirstChild("Remotes") 
                 and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
                 and ReplicatedStorage.Remotes.Characters:FindFirstChild("Sell")
+            CharactersInv = ReplicatedStorage:FindFirstChild("Remotes") 
+                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
+                and ReplicatedStorage.Remotes.Characters:FindFirstChild("UpdateInventory")
         end)
     end
-    if not CharactersSell then return end
 
     local function getUnitRarity(unitName, explicitRarity)
-        if explicitRarity and RarityOrder[explicitRarity] then return explicitRarity end
-        local clean = tostring(unitName or ""):lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " "):match("^%s*(.-)%s*$")
-        if not clean or clean == "" then return nil end
-        if CachedModuleRarities and CachedModuleRarities[clean] then return CachedModuleRarities[clean] end
-        if CharacterRarities and CharacterRarities[clean] then return CharacterRarities[clean] end
-        -- ABSOLUTE SAFETY: Unknown rarity MUST return nil (NEVER fallback to Common!)
+        if explicitRarity and InGameRarities then
+            for _, rName in pairs(InGameRarities) do
+                if explicitRarity:lower() == rName:lower() then return rName end
+            end
+        end
+        local raw = tostring(unitName or ""):lower():gsub("lv%s*%.?%s*%d+", ""):gsub("%d+", ""):gsub("[%[%]%(%)%_%-%.%#]", " ")
+        local nTrim = raw:match("^%s*(.-)%s*$") or ""
+        if nTrim == "" then return nil end
+
+        if CachedModuleRarities and CachedModuleRarities[nTrim] then return CachedModuleRarities[nTrim] end
+        if CharacterRarities and CharacterRarities[nTrim] then return CharacterRarities[nTrim] end
+        
+        if CharacterRarities then
+            for charKey, rVal in pairs(CharacterRarities) do
+                if nTrim == charKey or nTrim:find("^" .. charKey .. "$") or nTrim:find(charKey, 1, true) then
+                    return rVal
+                end
+            end
+        end
         return nil
     end
 
+    local function shouldSellItem(uName, explicitRarity, isLocked, mutation, trait, level)
+        if isLocked == true then return false end
+        if mutation and tostring(mutation):lower() ~= "none" and tostring(mutation) ~= "" and tostring(mutation):lower() ~= "nil" then return false end
+        if trait and tostring(trait):lower() ~= "none" and tostring(trait) ~= "" and tostring(trait):lower() ~= "nil" then return false end
+        if type(level) == "number" and level > 1 then return false end
+
+        local finalRarity = getUnitRarity(uName, explicitRarity)
+        if finalRarity and Config.SelectedSellRarities and Config.SelectedSellRarities[finalRarity] == true then
+            return true, finalRarity
+        end
+        return false, nil
+    end
+
     local uuidsToSell = {}
-    local seenUUIDs = {}
+    local instancesToSell = {}
+    local namesToSell = {}
+    local seenUIDs = {}
 
-    -- Scan DataService.DataServiceClient memory directly
+    -- 1. Scan DataService Profile Memory (Primary)
     pcall(function()
-        local dsClientMod = ReplicatedStorage:FindFirstChild("Data") 
-            and ReplicatedStorage.Data:FindFirstChild("DataService") 
-            and (ReplicatedStorage.Data.DataService:FindFirstChild("DataServiceClient") or ReplicatedStorage.Data.DataService:FindFirstChild("Data"))
-        if dsClientMod then
-            local ds = require(dsClientMod)
-            local rawInv = nil
-            if type(ds) == "table" then
-                if ds._data and type(ds._data) == "table" then
-                    rawInv = (ds._data._data and ds._data._data.Inventory) or ds._data.Inventory
-                elseif ds.client and ds.client._data and type(ds.client._data) == "table" then
-                    rawInv = (ds.client._data._data and ds.client._data._data.Inventory) or ds.client._data.Inventory
-                elseif ds.Inventory then
-                    rawInv = ds.Inventory
-                end
-            end
+        local dataServMod = ReplicatedStorage:FindFirstChild("Data") and ReplicatedStorage.Data:FindFirstChild("DataService")
+        if dataServMod then
+            local ds = require(dataServMod)
+            local client = (type(ds) == "table" and (ds.client or ds.Client or ds)) or ds
+            
+            for _, key in ipairs({"Inventory", "Characters", "Units", "Bag"}) do
+                local rawList = nil
+                pcall(function() rawList = client:get(LocalPlayer, {key}) end)
+                if not rawList then pcall(function() rawList = client:get({key}) end) end
+                if not rawList then pcall(function() rawList = ds:get(LocalPlayer, {key}) end) end
+                if not rawList and client.Data then rawList = client.Data[key] end
+                if not rawList and client.Profile then rawList = client.Profile[key] end
+                if not rawList and client._data then rawList = (client._data._data and client._data._data[key]) or client._data[key] end
+                if not rawList and ds._data then rawList = (ds._data._data and ds._data._data[key]) or ds._data[key] end
 
-            if rawInv and type(rawInv) == "table" then
-                for _, item in pairs(rawInv) do
-                    if type(item) == "table" then
-                        local uid = item.UUID or item.Uuid or item.Id or item.uid
-                        local uName = item.Name or item.CharacterName or item.UnitName or ""
-                        local isLocked = item.isLocked == true or item.Locked == true or item.IsLocked == true
-                        local hasMutation = item.Mutation and tostring(item.Mutation):lower() ~= "none" and tostring(item.Mutation) ~= ""
-                        local hasTrait = item.Trait and tostring(item.Trait):lower() ~= "none" and tostring(item.Trait) ~= ""
-                        local isLeveled = type(item.Level) == "number" and item.Level > 1
-
-                        -- STRICT PROTECTION: Never sell locked units, mutations, traits, or leveled units!
-                        if uid and not seenUUIDs[uid] and not isLocked and not hasMutation and not hasTrait and not isLeveled then
+                if type(rawList) == "table" then
+                    for _, item in pairs(rawList) do
+                        if type(item) == "table" then
+                            local uid = item.UUID or item.Uuid or item.Id or item.uid
+                            local uName = item.Name or item.CharacterName or item.UnitName or ""
+                            local isLocked = item.isLocked == true or item.Locked == true or item.IsLocked == true
+                            local mut = item.Mutation or item.Variant
+                            local trait = item.Trait or item.Traits
+                            local lvl = item.Level or item.Lvl
                             local rStr = item.Rarity or item.Tier
-                            local finalRarity = getUnitRarity(uName, rStr)
 
-                            -- ONLY sell if this exact Rarity is explicitly checked in Config.SelectedSellRarities
-                            if finalRarity and Config.SelectedSellRarities and Config.SelectedSellRarities[finalRarity] == true then
-                                seenUUIDs[uid] = true
+                            local sellOk, _ = shouldSellItem(uName, rStr, isLocked, mut, trait, lvl)
+                            if sellOk and uid and not seenUIDs[uid] then
+                                seenUIDs[uid] = true
                                 table.insert(uuidsToSell, uid)
+                                table.insert(namesToSell, uName)
                             end
                         end
                     end
@@ -2087,11 +2113,58 @@ local function executeAutoSell()
         end
     end)
 
-    -- STRICT EXECUTION: Send only verified UUID array
+    -- 2. Scan LocalPlayer Data / PlayerData Folders
+    pcall(function()
+        for _, fName in ipairs({"Data", "PlayerData", "Inventory", "Characters"}) do
+            local df = LocalPlayer:FindFirstChild(fName)
+            if df then
+                local invFolder = df:FindFirstChild("Inventory") or df:FindFirstChild("Characters") or df
+                for _, item in ipairs(invFolder:GetChildren()) do
+                    if item:IsA("Instance") and item.Name ~= "Terrain" then
+                        local uid = item:GetAttribute("UUID") or item:GetAttribute("Uuid") or item:GetAttribute("Id") or item.Name
+                        local uName = item:GetAttribute("CharacterName") or item:GetAttribute("Name") or item.Name
+                        local isLocked = item:GetAttribute("Locked") == true or item:GetAttribute("isLocked") == true
+                        local mut = item:GetAttribute("Mutation") or item:GetAttribute("Variant")
+                        local trait = item:GetAttribute("Trait")
+                        local lvl = item:GetAttribute("Level") or item:GetAttribute("Lvl")
+                        local rStr = item:GetAttribute("Rarity") or item:GetAttribute("Tier")
+
+                        local sellOk, _ = shouldSellItem(uName, rStr, isLocked, mut, trait, lvl)
+                        if sellOk then
+                            if uid and not seenUIDs[uid] then
+                                seenUIDs[uid] = true
+                                table.insert(uuidsToSell, uid)
+                            end
+                            table.insert(instancesToSell, item)
+                            table.insert(namesToSell, uName)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 3. Execute Multi-Format Selling
     if #uuidsToSell > 0 then
-        pcall(function() CharactersSell:FireServer(uuidsToSell) end)
-        for _, uid in ipairs(uuidsToSell) do
-            pcall(function() CharactersSell:FireServer(uid) end)
+        if CharactersSell then
+            pcall(function() CharactersSell:FireServer(uuidsToSell) end)
+            pcall(function() CharactersSell:FireServer({ UUIDs = uuidsToSell }) end)
+            pcall(function() CharactersSell:FireServer("Sell", uuidsToSell) end)
+            for _, uid in ipairs(uuidsToSell) do
+                pcall(function() CharactersSell:FireServer(uid) end)
+                pcall(function() CharactersSell:FireServer({ UUID = uid }) end)
+            end
+        end
+        if CharactersInv then
+            pcall(function() CharactersInv:FireServer("Sell", uuidsToSell) end)
+            pcall(function() CharactersInv:FireServer("SellUnits", uuidsToSell) end)
+        end
+    end
+
+    if #instancesToSell > 0 and CharactersSell then
+        for _, inst in ipairs(instancesToSell) do
+            pcall(function() CharactersSell:FireServer(inst) end)
+            pcall(function() CharactersSell:FireServer(inst.Name) end)
         end
     end
 end

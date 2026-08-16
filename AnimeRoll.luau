@@ -2941,32 +2941,45 @@ end
 
 local function executeSmartAutoBuy()
     if not CharactersBuy then 
-        -- พยายามหา remote ใหม่ถ้ายังไม่มี
         pcall(function()
             CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
                 and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
                 and ReplicatedStorage.Remotes.Characters:FindFirstChild("Buy")
         end)
-        if not CharactersBuy then 
-            Log("Warning", "CharactersBuy remote not found!")
-            return 
-        end
     end
 
-    -- กำหนด Tier ที่จะซื้อ
+    -- 1. FIRST PRIORITY: Scan stand models on player plot (Multi-Select Rarity & Mutation Filter)
+    local targets = getMatchingStandTargets()
+    local boughtCount = 0
+    if #targets > 0 then
+        for _, target in ipairs(targets) do
+            local curGold = getCurrentPlayerGold()
+            local cost = target.Cost or 200
+            if curGold >= cost then
+                if buyStandTarget(target) then
+                    boughtCount = boughtCount + 1
+                    task.wait(randomDelay(0.08, 0.03))
+                end
+            else
+                warn("⏳ [SMART BUY] Insufficient Gold for " .. tostring(target.Name) .. " (Have: " .. tostring(curGold) .. ", Cost: " .. tostring(cost) .. ")")
+            end
+        end
+        return boughtCount
+    end
+
+    -- 2. SECOND PRIORITY: Direct Tier & Slot purchase fallback
     local tiers = {}
-    if Config.SelectedTier == "All" or Config.SelectedTier == "All Tiers" then
+    if Config.SelectedTier == "All" or Config.SelectedTier == "All Tiers" or Config.SelectedTier == nil then
         tiers = {1, 2, 3, 4}
-    elseif Config.SelectedTier then
+    elseif type(Config.SelectedTier) == "number" then
         tiers = {Config.SelectedTier}
     else
-        tiers = {1, 2, 3, 4} -- fallback
+        tiers = {1, 2, 3, 4}
     end
 
-    -- กำหนด Slot ที่จะซื้อ
     local slots = {}
     local slotStr = Config.SelectedSlot or "All Slots"
-    if slotStr == "All Slots" then
+    if slotStr == "All Slots" or slotStr == nil then
         slots = {1, 2, 3}
     elseif slotStr == "Slot 1" then
         slots = {1}
@@ -2978,19 +2991,15 @@ local function executeSmartAutoBuy()
         slots = {1, 2, 3}
     end
 
-    -- วนลูปซื้อตาม Tier และ Slot
     for _, tier in ipairs(tiers) do
         for _, slot in ipairs(slots) do
             local gold = getCurrentPlayerGold()
-            -- ถ้าเงินน้อยกว่า 200 ให้หยุด (หรือปรับตามราคาขั้นต่ำ)
-            if gold < 200 then
-                Log("Warning", "Not enough gold to buy tier %d slot %d (have %d)", tier, slot, gold)
-                return
+            if gold >= 200 and CharactersBuy then
+                pcall(function()
+                    CharactersBuy:FireServer(tier, slot)
+                    task.wait(randomDelay(0.06, 0.03))
+                end)
             end
-            pcall(function()
-                CharactersBuy:FireServer(tier, slot)
-                task.wait(randomDelay(0.06, 0.03))
-            end)
         end
     end
 end

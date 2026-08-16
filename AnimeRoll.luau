@@ -2659,7 +2659,12 @@ local function getCurrentPlayerGold()
         return dsGold
     end
 
-    -- 3. LocalPlayer Data / leaderstats ValueBase
+    -- 3. LocalPlayer Data / leaderstats / Attributes
+    local pAttrGold = LocalPlayer:GetAttribute("Gold") or LocalPlayer:GetAttribute("Coins") or LocalPlayer:GetAttribute("Money")
+    if pAttrGold and tonumber(pAttrGold) ~= nil then
+        return tonumber(pAttrGold)
+    end
+
     for _, fName in ipairs({"Data", "leaderstats", "PlayerData", "Stats"}) do
         local dFolder = LocalPlayer:FindFirstChild(fName)
         if dFolder then
@@ -2668,6 +2673,10 @@ local function getCurrentPlayerGold()
                 if gVal and gVal:IsA("ValueBase") and tonumber(gVal.Value) ~= nil then
                     return tonumber(gVal.Value)
                 end
+            end
+            local fAttr = dFolder:GetAttribute("Gold") or dFolder:GetAttribute("Coins")
+            if fAttr and tonumber(fAttr) ~= nil then
+                return tonumber(fAttr)
             end
         end
     end

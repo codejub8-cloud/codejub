@@ -3544,33 +3544,36 @@ Log("Info", "AutoRoll: %s, AutoBuy: %s, AutoSell: %s",
 local function performAutoRollStep()
     if not Config.AutoRoll then return end
 
-    -- STEP 1: Smart Auto Buy with Gold Wait Lock
+    -- STEP 1: Smart Auto Buy with Active Gold Waiting (Never bail out / return early)
     if Config.AutoBuyByRarity then
-        local targets = getMatchingStandTargets()
-        if #targets > 0 then
+        local waitCounter = 0
+        while Config.AutoRoll and Config.AutoBuyByRarity do
+            local targets = getMatchingStandTargets()
+            if #targets == 0 then break end
+            
+            local hasUnaffordable = false
             for _, target in ipairs(targets) do
                 local requiredCost = target.Cost or 200
-                local waitCount = 0
-                while Config.AutoRoll and Config.AutoBuyByRarity and target.Model and target.Model.Parent and getCurrentPlayerGold() < requiredCost do
-                    task.wait(randomDelay(0.4, 0.2))
-                    waitCount = waitCount + 1
-                    if waitCount >= 10 then
-                        warn("⏳ [AUTO ROLL] Waiting for Gold to buy " .. tostring(target.Name) .. " (Have: " .. tostring(getCurrentPlayerGold()) .. ", Need: " .. tostring(requiredCost) .. ")")
-                        waitCount = 0
-                    end
-                end
-                if target.Model and target.Model.Parent and getCurrentPlayerGold() >= requiredCost then
+                local curGold = getCurrentPlayerGold()
+                if curGold < requiredCost then
+                    hasUnaffordable = true
+                else
                     buyStandTarget(target)
-                    task.wait(randomDelay(0.15, 0.08))
+                    task.wait(randomDelay(0.12, 0.05))
                 end
             end
-        end
-
-        local remaining = getMatchingStandTargets()
-        for _, t in ipairs(remaining) do
-            if getCurrentPlayerGold() < (t.Cost or 200) then
-                return
+            
+            if not hasUnaffordable then
+                break
             end
+            
+            waitCounter = waitCounter + 1
+            if waitCounter >= 8 then
+                warn("⏳ [AUTO ROLL] Waiting for Gold to buy matching targets on stand (Current: " .. tostring(getCurrentPlayerGold()) .. ")")
+                waitCounter = 0
+            end
+            
+            task.wait(randomDelay(0.5, 0.2))
         end
     end
 

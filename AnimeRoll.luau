@@ -3531,7 +3531,20 @@ local function performAutoRollStep()
 
     if not Config.AutoRoll then return end
 
-    -- STEP 2: Roll ทันที (ไม่ต้องรอให้เงินพอ)
+    -- STEP 1.5: ตรวจสอบเงินก่อน Roll (ถ้า Roll ต้องใช้เงิน)
+    local rollCost = 100  -- ปรับตามค่าใช้จ่ายในการ Roll ของเกม (ถ้า Roll ฟรีให้ตั้งเป็น 0)
+    local waitCount = 0
+    while Config.AutoRoll and getCurrentPlayerGold() < rollCost do
+        waitCount = waitCount + 1
+        if waitCount % 10 == 0 then
+            warn("⏳ [AUTO ROLL] Waiting for gold to roll... (Have: " .. tostring(getCurrentPlayerGold()) .. ", Need: " .. tostring(rollCost) .. ")")
+        end
+        task.wait(0.5)
+    end
+
+    if not Config.AutoRoll then return end
+
+    -- STEP 2: Roll
     local plot = getMyPlot()
     local prompt, btn = getPlotRollPrompt(plot)
     if prompt then

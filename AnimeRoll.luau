@@ -2875,12 +2875,12 @@ local function getMatchingStandTargets()
 end
 
 local function buyStandTarget(target)
-    if not target or not target.Model or not target.Model.Parent then return end
+    if not target then return false end
     
-    -- STRICT HARD GUARD: NEVER fire prompt or remote if player does not have enough Gold!
     local curGold = getCurrentPlayerGold()
     local cost = target.Cost or 200
     if curGold < cost then
+        warn("❌ [BUY] Not enough Gold for " .. tostring(target.Name) .. " (Have: " .. tostring(curGold) .. ", Need: " .. tostring(cost) .. ")")
         return false
     end
     
@@ -2892,6 +2892,20 @@ local function buyStandTarget(target)
         end)
     end
 
+    local tier = 1
+    if target.Rarity then
+        local r = tostring(target.Rarity):lower()
+        if r == "common" or r == "rare" then tier = 1
+        elseif r == "epic" then tier = 2
+        elseif r == "legendary" or r == "mythic" then tier = 3
+        elseif r == "secret" or r == "god" or r == "limited" then tier = 4
+        end
+    end
+    local slot = target.SlotIdx or 1
+
+    warn("🟢 [BUYING] Target: " .. tostring(target.Name) .. " | Rarity: " .. tostring(target.Rarity) .. " | Tier: " .. tostring(tier) .. " | Slot: " .. tostring(slot) .. " | Cost: " .. tostring(cost))
+
+    -- 1. Fire ProximityPrompt on Stand Model
     if target.Prompt then
         pcall(function()
             target.Prompt.MaxActivationDistance = 999999
@@ -2911,15 +2925,18 @@ local function buyStandTarget(target)
             end)
         end
     end
-    
+
+    -- 2. Fire Characters.Buy Remote with all verified signatures
     if CharactersBuy then
-        for tier = 1, 4 do
-            pcall(function() CharactersBuy:FireServer(tier, target.SlotIdx) end)
-            pcall(function() CharactersBuy:FireServer(tier, 1) end)
-            pcall(function() CharactersBuy:FireServer(tier, 2) end)
-            pcall(function() CharactersBuy:FireServer(tier, 3) end)
-        end
+        pcall(function() CharactersBuy:FireServer(tier, slot) end)
+        pcall(function() CharactersBuy:FireServer(tier, 1) end)
+        pcall(function() CharactersBuy:FireServer(tier, 2) end)
+        pcall(function() CharactersBuy:FireServer(tier, 3) end)
+        pcall(function() CharactersBuy:FireServer({ Tier = tier, Slot = slot }) end)
+        pcall(function() CharactersBuy:FireServer(tier, slot, "Buy") end)
     end
+    
+    return true
 end
 
 local function executeSmartAutoBuy()
@@ -3518,26 +3535,41 @@ Log("Info", "AutoRoll: %s, AutoBuy: %s, AutoSell: %s",
 local function performAutoRollStep()
     if not Config.AutoRoll then return end
 
-    -- STEP 1: ซื้ออัตโนมัติก่อน (ถ้าเปิด AutoBuy)
+    -- STEP 1: Smart Auto Buy with Gold Wait Lock
     if Config.AutoBuyByRarity then
-        executeSmartAutoBuy()
+        local targets = getMatchingStandTargets()
+        if #targets > 0 then
+            for _, target in ipairs(targets) do
+                local requiredCost = target.Cost or 200
+                local waitCount = 0
+                while Config.AutoRoll and Config.AutoBuyByRarity and target.Model and target.Model.Parent and getCurrentPlayerGold() < requiredCost do
+                    task.wait(randomDelay(0.4, 0.2))
+                    waitCount = waitCount + 1
+                    if waitCount >= 10 then
+                        warn("⏳ [AUTO ROLL] Waiting for Gold to buy " .. tostring(target.Name) .. " (Have: " .. tostring(getCurrentPlayerGold()) .. ", Need: " .. tostring(requiredCost) .. ")")
+                        waitCount = 0
+                    end
+                end
+                if target.Model and target.Model.Parent and getCurrentPlayerGold() >= requiredCost then
+                    buyStandTarget(target)
+                    task.wait(randomDelay(0.15, 0.08))
+                end
+            end
+        end
+
+        local remaining = getMatchingStandTargets()
+        for _, t in ipairs(remaining) do
+            if getCurrentPlayerGold() < (t.Cost or 200) then
+                return
+            end
+        end
     end
 
-    -- STEP 2: ตรวจสอบว่าเปิด AutoRoll อยู่ไหม
     if not Config.AutoRoll then return end
 
-    -- STEP 3: ตรวจสอบเงินพอ Roll หรือไม่
-    local gold = getCurrentPlayerGold()
-    if gold < 100 then
-        Log("Warning", "Not enough gold to roll (need 100, have %d)", gold)
-        task.wait(1)
-        return
-    end
-
-    -- STEP 4: กด Roll
+    -- STEP 2: Trigger Roll
     local plot = getMyPlot()
     local prompt, btn = getPlotRollPrompt(plot)
-    
     if prompt then
         firePrompt(prompt)
         Log("Info", "Roll triggered via ProximityPrompt")
@@ -3546,23 +3578,22 @@ local function performAutoRollStep()
             CharactersRoll:FireServer() 
             Log("Info", "Roll triggered via Remote")
         end)
-    else
-        Log("Warning", "No roll method available!")
     end
 
-    -- STEP 5: รอสักครู่แล้วซื้ออัตโนมัติอีกครั้ง
+    -- STEP 3: Wait for new roll animation
     task.wait(randomDelay(0.35, 0.1))
-    
+
+    -- STEP 4: Inspect new roll and buy immediately if funds ready
     if Config.AutoBuyByRarity then
         executeSmartAutoBuy()
     end
 
-    -- STEP 6: Auto Pickup All (ถ้าเปิด)
+    -- STEP 5: Auto Pickup All (ถ้าเปิด)
     if Config.AutoPickupAll then
         autoPickupAll()
     end
 
-    -- STEP 7: รอตาม Delay ที่ตั้งไว้
+    -- STEP 6: Wait configured delay
     task.wait(randomDelay(math.max(1.5, Config.RollDelay), 0.3))
 end
 

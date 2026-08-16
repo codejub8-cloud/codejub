@@ -34,6 +34,51 @@ if not LocalPlayer then
 end
 
 --// ══════════════════════════════════════════════════════════
+--// CUPIE HUB V2.0 UTILITIES & CONFIG PERSISTENCE
+--// ══════════════════════════════════════════════════════════
+local HttpService = game:GetService("HttpService")
+
+local function Log(logType, message, ...)
+    local args = {...}
+    local ok, formatted = pcall(function()
+        if #args > 0 then
+            return string.format(message, table.unpack(args))
+        else
+            return tostring(message)
+        end
+    end)
+    local msg = ok and formatted or tostring(message)
+    local prefix = "[CUPIE HUB]"
+    
+    if logType == "Error" then
+        warn(prefix .. " ❌ " .. msg)
+    elseif logType == "Warning" then
+        warn(prefix .. " ⚠️ " .. msg)
+    elseif logType == "Success" then
+        print(prefix .. " ✅ " .. msg)
+    else
+        print(prefix .. " ℹ️ " .. msg)
+    end
+end
+
+local function randomDelay(base, variance)
+    variance = variance or 0.3
+    return base + (math.random() * variance)
+end
+
+local function createThrottle(callback, cooldown)
+    local lastRun = 0
+    return function(...)
+        local now = tick()
+        if now - lastRun >= cooldown then
+            lastRun = now
+            return callback(...)
+        end
+    end
+end
+
+
+--// ══════════════════════════════════════════════════════════
 --// THEME SYSTEM (Eye-Comfort & Harmonious Palettes)
 --// ══════════════════════════════════════════════════════════
 Cupie.Themes = {
@@ -197,18 +242,33 @@ function Cupie:StopLoop(id)
     Cupie.Loops[id] = false
 end
 
-function Cupie:SafeInvoke(remote, ...)
-    if not remote then return end
-    local ok, res = pcall(function(...) return remote:InvokeServer(...) end, ...)
-    return ok, res
+function Cupie:SafeFire(remote, ...)
+    if not remote then 
+        Log("Warning", "Attempted to fire nil remote!")
+        return false
+    end
+    local success, err = pcall(function(...) remote:FireServer(...) end, ...)
+    if not success then
+        Log("Error", "Failed to fire remote: %s", tostring(err))
+    end
+    return success
 end
 
-function Cupie:SafeFire(remote, ...)
-    if not remote then return end
-    pcall(function(...) remote:FireServer(...) end, ...)
+function Cupie:SafeInvoke(remote, ...)
+    if not remote then 
+        Log("Warning", "Attempted to invoke nil remote!")
+        return false, nil
+    end
+    local success, result = pcall(function(...) return remote:InvokeServer(...) end, ...)
+    if not success then
+        Log("Error", "Failed to invoke remote: %s", tostring(result or "unknown"))
+    end
+    return success, result
 end
 
 function Cupie:Unload()
+    Log("Info", "Unloading Cupie Hub...")
+    pcall(saveConfig)
     for id in pairs(Cupie.Loops) do
         Cupie.Loops[id] = nil
     end
@@ -1852,6 +1912,47 @@ local Config = {
     AntiAFK             = true
 }
 
+-- Config Persistence Functions (shared + writefile/readfile)
+local function saveConfig()
+    pcall(function()
+        if shared then
+            shared.CupieConfig = Config
+        end
+        if writefile and HttpService then
+            pcall(function()
+                writefile("CupieHub_Config.json", HttpService:JSONEncode(Config))
+            end)
+        end
+        Log("Success", "Configuration saved successfully!")
+    end)
+end
+
+local function loadConfig()
+    pcall(function()
+        if shared and shared.CupieConfig then
+            for k, v in pairs(shared.CupieConfig) do
+                if Config[k] ~= nil then
+                    Config[k] = v
+                end
+            end
+        end
+        if readfile and HttpService then
+            pcall(function()
+                local data = readfile("CupieHub_Config.json")
+                if data and data ~= "" then
+                    local loaded = HttpService:JSONDecode(data)
+                    for k, v in pairs(loaded) do
+                        if Config[k] ~= nil then
+                            Config[k] = v
+                        end
+                    end
+                end
+            end)
+        end
+        Log("Info", "Configuration loaded successfully!")
+    end)
+end
+
 -- ══════════════════════════════════════════════════════════
 -- SAFE NOTIFICATION HANDLER (Zero Damage to Game UI)
 -- ══════════════════════════════════════════════════════════
@@ -2181,7 +2282,8 @@ end
 -- 100% SAFE & GUARANTEED AUTO SELL ENGINE (MULTI-SOURCE SCAN + UUID & INSTANCE BUYER)
 -- ══════════════════════════════════════════════════════════
 
-local function executeAutoSell()
+local throttledAutoSell = createThrottle(function()
+    Log("Info", "Executing Auto Sell scan...")
     if not CharactersSell and not CharactersInv then
         pcall(function()
             CharactersSell = ReplicatedStorage:FindFirstChild("Remotes") 
@@ -2329,6 +2431,13 @@ local function executeAutoSell()
             pcall(function() CharactersSell:FireServer(inst.Name) end)
         end
     end
+    if #uuidsToSell > 0 then
+        Log("Success", "Sold %d units for Gold!", #uuidsToSell)
+    end
+end, 2.5)
+
+local function executeAutoSell()
+    throttledAutoSell()
 end
 
 -- ══════════════════════════════════════════════════════════
@@ -3265,12 +3374,21 @@ task.spawn(function()
     local startTime = os.time()
     updateDashboardStats(startTime)
     while true do
-        task.wait(1.0)
+        task.wait(2.0)
         pcall(function()
             updateDashboardStats(startTime)
         end)
     end
 end)
+
+-- Load saved user preferences if available
+loadConfig()
+
+Log("Success", "CUPIE HUB v2.0 Loaded Successfully!")
+Log("Info", "AutoRoll: %s, AutoBuy: %s, AutoSell: %s", 
+    tostring(Config.AutoRoll), 
+    tostring(Config.AutoBuyByRarity),
+    tostring(Config.AutoSellLowTier))
 
 
 
@@ -3281,7 +3399,7 @@ end)
 local function performAutoRollStep()
     if not Config.AutoRoll then return end
 
-    -- STEP 1: If Smart Auto Buy is enabled, inspect current stands
+    -- STEP 1: Smart Auto Buy with Random Wait
     if Config.AutoBuyByRarity then
         local targets = getMatchingStandTargets()
         
@@ -3290,25 +3408,26 @@ local function performAutoRollStep()
                 local requiredCost = target.Cost or 200
                 local curGold = getCurrentPlayerGold()
                 
-                -- HARD LOCKOUT: If money is not enough, DO NOT BUY AND DO NOT ROLL!
-                -- Freeze loop and wait until gold is farmed from combat!
+                local waitCount = 0
                 while Config.AutoRoll and Config.AutoBuyByRarity and target.Model and target.Model.Parent and getCurrentPlayerGold() < requiredCost do
-                    task.wait(0.4)
+                    task.wait(randomDelay(0.4, 0.2))
+                    waitCount = waitCount + 1
+                    if waitCount >= 15 then
+                        Log("Warning", "Waiting for Gold (%d / %d) to buy %s...", getCurrentPlayerGold(), requiredCost, target.Name or "Unit")
+                        waitCount = 0
+                    end
                 end
                 
-                -- When gold is strictly sufficient, BUY IT!
                 if target.Model and target.Model.Parent and getCurrentPlayerGold() >= requiredCost then
                     buyStandTarget(target)
-                    task.wait(0.2)
+                    task.wait(randomDelay(0.15, 0.1))
                 end
             end
         end
         
-        -- Check if ANY target is still unbought because gold is not yet sufficient
         local remaining = getMatchingStandTargets()
         for _, t in ipairs(remaining) do
             if getCurrentPlayerGold() < (t.Cost or 200) then
-                -- CANNOT ROLL: Freeze right here and return!
                 return
             end
         end
@@ -3316,7 +3435,7 @@ local function performAutoRollStep()
 
     if not Config.AutoRoll then return end
 
-    -- STEP 2: All matching targets bought (or stand is clear): TRIGGER ROLL!
+    -- STEP 2: Trigger Roll
     local plot = getMyPlot()
     local prompt, btn = getPlotRollPrompt(plot)
     if prompt then
@@ -3325,24 +3444,23 @@ local function performAutoRollStep()
         pcall(function() CharactersRoll:FireServer() end)
     end
 
-    -- STEP 3: Wait for new roll animation & stand models to update (0.35s)
-    task.wait(0.35)
+    -- STEP 3: Wait for new roll animation & stand models with anti-detection variance
+    task.wait(randomDelay(0.3, 0.1))
 
-    -- STEP 4: Inspect new roll: If funds are already sufficient, buy immediately
+    -- STEP 4: Inspect new roll and buy immediately if funds are ready
     if Config.AutoBuyByRarity then
         local newTargets = getMatchingStandTargets()
         for _, target in ipairs(newTargets) do
             local cost = target.Cost or 200
             if getCurrentPlayerGold() >= cost then
                 buyStandTarget(target)
-                task.wait(0.1)
+                task.wait(randomDelay(0.08, 0.05))
             end
-            -- If gold is not enough, DO NOT BUY! The next performAutoRollStep will freeze and wait!
         end
     end
 
-    -- STEP 5: Wait user configured Roll Delay
-    task.wait(math.max(1.0, Config.RollDelay - 0.35))
+    -- STEP 5: Wait user configured Roll Delay + Random Variance
+    task.wait(randomDelay(math.max(1.5, Config.RollDelay), 0.3))
 end
 
 
@@ -3945,6 +4063,32 @@ MiscTab:CreateToggle({
     Default = true,
     Callback = function(state)
         Config.AntiAFK = state
+    end
+})
+
+MiscTab:CreateHeader("Configuration & Profile Management", 8)
+
+MiscTab:CreateButton({
+    Name = "Save Current Settings",
+    Description = "Save all toggle/slider values to file and shared memory",
+    Callback = function()
+        saveConfig()
+        Cupie:Notify("Settings Saved", "Configuration saved successfully!", 2.5)
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "Reset Settings to Default",
+    Description = "Reset all settings to default values",
+    Callback = function()
+        Config.AutoRoll = false
+        Config.AutoBuyByRarity = false
+        Config.AutoSellLowTier = false
+        Config.AutoEquipBest = false
+        Config.AutoFight = false
+        Config.FastAttackAura = false
+        Config.AutoUpgradeStats = false
+        Cupie:Notify("Settings Reset", "All settings restored to default!", 2.5)
     end
 })
 

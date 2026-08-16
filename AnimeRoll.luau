@@ -2620,7 +2620,7 @@ end
 
 
 local function getCurrentPlayerGold()
-    -- 1. ตรวจสอบ leaderstats (ตรงที่สุด)
+    -- 1. ใช้ leaderstats (เชื่อถือได้ที่สุด)
     local ls = LocalPlayer:FindFirstChild("leaderstats")
     if ls then
         for _, child in ipairs(ls:GetChildren()) do
@@ -2631,23 +2631,16 @@ local function getCurrentPlayerGold()
         end
     end
 
-    -- 2. ตรวจสอบ Attribute ของ LocalPlayer
+    -- 2. ใช้ Attribute (ถ้าไม่มี leaderstats)
     local attrs = LocalPlayer:GetAttributes()
-    if attrs.Gold and tonumber(attrs.Gold) then
-        return tonumber(attrs.Gold)
-    end
-    if attrs.Coins and tonumber(attrs.Coins) then
-        return tonumber(attrs.Coins)
-    end
-    if attrs.Money and tonumber(attrs.Money) then
-        return tonumber(attrs.Money)
-    end
+    if attrs.Gold and tonumber(attrs.Gold) then return tonumber(attrs.Gold) end
+    if attrs.Coins and tonumber(attrs.Coins) then return tonumber(attrs.Coins) end
+    if attrs.Money and tonumber(attrs.Money) then return tonumber(attrs.Money) end
 
-    -- 3. ตรวจสอบโฟลเดอร์ Data / PlayerData
+    -- 3. ใช้ Data / PlayerData (ถ้ามี)
     for _, fName in ipairs({"Data", "PlayerData", "Stats"}) do
         local folder = LocalPlayer:FindFirstChild(fName)
         if folder then
-            -- ตรวจสอบ ValueBase
             for _, child in ipairs(folder:GetChildren()) do
                 if child:IsA("NumberValue") or child:IsA("ValueBase") then
                     local n = child.Name:lower()
@@ -2656,39 +2649,12 @@ local function getCurrentPlayerGold()
                     end
                 end
             end
-            -- ตรวจสอบ Attribute ของโฟลเดอร์
             local fAttr = folder:GetAttribute("Gold") or folder:GetAttribute("Coins") or folder:GetAttribute("Money")
-            if fAttr and tonumber(fAttr) then
-                return tonumber(fAttr)
-            end
+            if fAttr and tonumber(fAttr) then return tonumber(fAttr) end
         end
     end
 
-    -- 4. สุดท้าย: สแกน HUD แต่จำกัดเฉพาะ GUI ที่ไม่เกี่ยวกับ Shop/Pass/Upgrade
-    local pGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if pGui then
-        for _, gui in ipairs(pGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name ~= "CUPIEUI" and gui.Enabled then
-                local gName = gui.Name:lower()
-                -- ข้าม GUI ที่เกี่ยวกับ Shop, Pass, Product, Upgrade
-                if not gName:find("shop") and not gName:find("pass") and not gName:find("product") and not gName:find("upgr") then
-                    for _, lbl in ipairs(gui:GetDescendants()) do
-                        if lbl:IsA("TextLabel") and lbl.Visible and lbl.Text:match("%d") then
-                            local lName = lbl.Name:lower()
-                            local pName = (lbl.Parent and lbl.Parent.Name:lower()) or ""
-                            if not pName:find("shop") and not pName:find("product") and not pName:find("cost") and not pName:find("price") then
-                                if (lName:find("gold") or lName:find("coin") or lName:find("money") or pName:find("gold") or pName:find("coins")) then
-                                    local parsed = parseFormattedNumber(lbl.Text)
-                                    if parsed and parsed > 0 then return parsed end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
+    -- 4. ถ้าไม่มีแหล่งข้อมูลที่แน่นอน ให้คืนค่า 0
     return 0
 end
 
@@ -2876,22 +2842,29 @@ end
 
 local function buyStandTarget(target)
     if not target then return false end
-    
+
+    -- ตรวจสอบเงินก่อนทุกครั้ง
     local curGold = getCurrentPlayerGold()
     local cost = target.Cost or 200
     if curGold < cost then
         warn("❌ [BUY] Not enough Gold for " .. tostring(target.Name) .. " (Have: " .. tostring(curGold) .. ", Need: " .. tostring(cost) .. ")")
         return false
     end
-    
+
+    -- ตรวจสอบ Remote
     if not CharactersBuy then
         pcall(function()
-            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
-                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
+            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes")
+                and ReplicatedStorage.Remotes:FindFirstChild("Characters")
                 and ReplicatedStorage.Remotes.Characters:FindFirstChild("Buy")
         end)
+        if not CharactersBuy then
+            warn("❌ CharactersBuy remote not found!")
+            return false
+        end
     end
 
+    -- คำนวณ Tier และ Slot
     local tier = 1
     if target.Rarity then
         local r = tostring(target.Rarity):lower()
@@ -2905,7 +2878,7 @@ local function buyStandTarget(target)
 
     warn("🟢 [BUYING] Target: " .. tostring(target.Name) .. " | Rarity: " .. tostring(target.Rarity) .. " | Tier: " .. tostring(tier) .. " | Slot: " .. tostring(slot) .. " | Cost: " .. tostring(cost))
 
-    -- 1. Fire ProximityPrompt on Stand Model
+    -- 1. Fire ProximityPrompt (ถ้ามี)
     if target.Prompt then
         pcall(function()
             target.Prompt.MaxActivationDistance = 999999
@@ -2926,48 +2899,45 @@ local function buyStandTarget(target)
         end
     end
 
-    -- 2. Fire Characters.Buy Remote with all verified signatures
+    -- 2. Fire Remote (เฉพาะรูปแบบที่ถูกต้อง พร้อมเช็คเงินซ้ำ)
     if CharactersBuy then
-        pcall(function() CharactersBuy:FireServer(tier, slot) end)
-        pcall(function() CharactersBuy:FireServer(tier, 1) end)
-        pcall(function() CharactersBuy:FireServer(tier, 2) end)
-        pcall(function() CharactersBuy:FireServer(tier, 3) end)
-        pcall(function() CharactersBuy:FireServer({ Tier = tier, Slot = slot }) end)
-        pcall(function() CharactersBuy:FireServer(tier, slot, "Buy") end)
+        local finalGold = getCurrentPlayerGold()
+        if finalGold >= cost then
+            pcall(function() CharactersBuy:FireServer(tier, slot) end)
+            pcall(function() CharactersBuy:FireServer({ Tier = tier, Slot = slot }) end)
+        else
+            warn("❌ [BUY] Gold changed before buying! Have: " .. tostring(finalGold))
+            return false
+        end
     end
-    
+
     return true
 end
 
 local function executeSmartAutoBuy()
-    if not CharactersBuy then 
+    if not CharactersBuy then
         pcall(function()
-            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
-                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
+            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes")
+                and ReplicatedStorage.Remotes:FindFirstChild("Characters")
                 and ReplicatedStorage.Remotes.Characters:FindFirstChild("Buy")
         end)
+        if not CharactersBuy then return end
     end
 
-    -- 1. FIRST PRIORITY: Scan stand models on player plot (Multi-Select Rarity & Mutation Filter)
     local targets = getMatchingStandTargets()
-    local boughtCount = 0
     if #targets > 0 then
         for _, target in ipairs(targets) do
             local curGold = getCurrentPlayerGold()
             local cost = target.Cost or 200
             if curGold >= cost then
-                if buyStandTarget(target) then
-                    boughtCount = boughtCount + 1
-                    task.wait(randomDelay(0.08, 0.03))
-                end
-            else
-                warn("⏳ [SMART BUY] Insufficient Gold for " .. tostring(target.Name) .. " (Have: " .. tostring(curGold) .. ", Cost: " .. tostring(cost) .. ")")
+                buyStandTarget(target)
+                task.wait(randomDelay(0.06, 0.02))
             end
         end
-        return boughtCount
+        return
     end
 
-    -- 2. SECOND PRIORITY: Direct Tier & Slot purchase fallback
+    -- Fallback: ซื้อตาม Tier และ Slot ที่เลือก
     local tiers = {}
     if Config.SelectedTier == "All" or Config.SelectedTier == "All Tiers" or Config.SelectedTier == nil then
         tiers = {1, 2, 3, 4}
@@ -2997,7 +2967,7 @@ local function executeSmartAutoBuy()
             if gold >= 200 and CharactersBuy then
                 pcall(function()
                     CharactersBuy:FireServer(tier, slot)
-                    task.wait(randomDelay(0.06, 0.03))
+                    task.wait(randomDelay(0.04, 0.02))
                 end)
             end
         end
@@ -3544,68 +3514,46 @@ Log("Info", "AutoRoll: %s, AutoBuy: %s, AutoSell: %s",
 local function performAutoRollStep()
     if not Config.AutoRoll then return end
 
-    -- STEP 1: Smart Auto Buy with Active Gold Waiting (Never bail out / return early)
+    -- STEP 1: พยายามซื้ออัตโนมัติ (เฉพาะตัวที่เงินพอ)
     if Config.AutoBuyByRarity then
-        local waitCounter = 0
-        while Config.AutoRoll and Config.AutoBuyByRarity do
-            local targets = getMatchingStandTargets()
-            if #targets == 0 then break end
-            
-            local hasUnaffordable = false
-            for _, target in ipairs(targets) do
-                local requiredCost = target.Cost or 200
-                local curGold = getCurrentPlayerGold()
-                if curGold < requiredCost then
-                    hasUnaffordable = true
-                else
-                    buyStandTarget(target)
-                    task.wait(randomDelay(0.12, 0.05))
-                end
+        local targets = getMatchingStandTargets()
+        for _, target in ipairs(targets) do
+            local curGold = getCurrentPlayerGold()
+            local cost = target.Cost or 200
+            if curGold >= cost then
+                buyStandTarget(target)
+                task.wait(randomDelay(0.08, 0.03))
+            else
+                warn("⏳ [AUTO ROLL] Not enough gold for " .. tostring(target.Name) .. " (Have: " .. tostring(curGold) .. ", Need: " .. tostring(cost) .. ")")
             end
-            
-            if not hasUnaffordable then
-                break
-            end
-            
-            waitCounter = waitCounter + 1
-            if waitCounter >= 8 then
-                warn("⏳ [AUTO ROLL] Waiting for Gold to buy matching targets on stand (Current: " .. tostring(getCurrentPlayerGold()) .. ")")
-                waitCounter = 0
-            end
-            
-            task.wait(randomDelay(0.5, 0.2))
         end
     end
 
     if not Config.AutoRoll then return end
 
-    -- STEP 2: Trigger Roll
+    -- STEP 2: Roll ทันที (ไม่ต้องรอให้เงินพอ)
     local plot = getMyPlot()
     local prompt, btn = getPlotRollPrompt(plot)
     if prompt then
         firePrompt(prompt)
         Log("Info", "Roll triggered via ProximityPrompt")
     elseif CharactersRoll then
-        pcall(function() 
-            CharactersRoll:FireServer() 
+        pcall(function()
+            CharactersRoll:FireServer()
             Log("Info", "Roll triggered via Remote")
         end)
     end
 
-    -- STEP 3: Wait for new roll animation
-    task.wait(randomDelay(0.35, 0.1))
-
-    -- STEP 4: Inspect new roll and buy immediately if funds ready
+    -- STEP 3: รอสั้น ๆ แล้วซื้อซ้ำ
+    task.wait(randomDelay(0.3, 0.1))
     if Config.AutoBuyByRarity then
         executeSmartAutoBuy()
     end
 
-    -- STEP 5: Auto Pickup All (ถ้าเปิด)
     if Config.AutoPickupAll then
         autoPickupAll()
     end
 
-    -- STEP 6: Wait configured delay
     task.wait(randomDelay(math.max(1.5, Config.RollDelay), 0.3))
 end
 

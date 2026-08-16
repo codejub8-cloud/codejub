@@ -3805,16 +3805,75 @@ UpgradeTab:CreateToggle({
     end
 })
 
-UpgradeTab:CreateHeader("Account Stat Upgrades (Verified Remotes)", 5)
+UpgradeTab:CreateHeader("Account Stat Upgrades (แยกตามประเภท)", 5)
 
+-- 1. อัปเกรดโชค (Luck)
 UpgradeTab:CreateToggle({
-    Name = "Auto Upgrade All Stats (Luck/Bag/Gold/Slots)",
-    Description = "Continuously spends Gold to upgrade Luck, Inventory size, Gold multiplier, and Slots",
-    Badge = "STATS",
+    Name = "Auto Upgrade Luck",
+    Description = "อัปเกรดโชคเพื่อเพิ่มโอกาสได้ตัวละครระดับสูง",
+    Badge = "LUCK",
     Default = false,
     Callback = function(state)
-        Config.AutoUpgradeStats = state
-        if state then
+        Config.AutoUpgradeLuck = state
+        saveConfig()
+        if state or Config.AutoUpgradeInventory or Config.AutoUpgradeGold or Config.AutoUpgradeSlots then
+            Cupie:StartLoop("AutoStatsLoop", 1.0, function()
+                executeStatUpgrades()
+            end)
+        else
+            Cupie:StopLoop("AutoStatsLoop")
+        end
+    end
+})
+
+-- 2. อัปเกรดกระเป๋า (Inventory)
+UpgradeTab:CreateToggle({
+    Name = "Auto Upgrade Inventory",
+    Description = "อัปเกรดกระเป๋าเพื่อเพิ่มช่องเก็บตัวละคร",
+    Badge = "BAG",
+    Default = false,
+    Callback = function(state)
+        Config.AutoUpgradeInventory = state
+        saveConfig()
+        if state or Config.AutoUpgradeLuck or Config.AutoUpgradeGold or Config.AutoUpgradeSlots then
+            Cupie:StartLoop("AutoStatsLoop", 1.0, function()
+                executeStatUpgrades()
+            end)
+        else
+            Cupie:StopLoop("AutoStatsLoop")
+        end
+    end
+})
+
+-- 3. อัปเกรดตัวคูณทอง (Gold Multiplier)
+UpgradeTab:CreateToggle({
+    Name = "Auto Upgrade Gold Multiplier",
+    Description = "อัปเกรดตัวคูณทองเพื่อเพิ่มรายได้",
+    Badge = "GOLD",
+    Default = false,
+    Callback = function(state)
+        Config.AutoUpgradeGold = state
+        saveConfig()
+        if state or Config.AutoUpgradeLuck or Config.AutoUpgradeInventory or Config.AutoUpgradeSlots then
+            Cupie:StartLoop("AutoStatsLoop", 1.0, function()
+                executeStatUpgrades()
+            end)
+        else
+            Cupie:StopLoop("AutoStatsLoop")
+        end
+    end
+})
+
+-- 4. อัปเกรดช่องสล็อต (Slots)
+UpgradeTab:CreateToggle({
+    Name = "Auto Upgrade Slots",
+    Description = "อัปเกรดช่องสล็อตเพื่อวางตัวละครได้มากขึ้น",
+    Badge = "SLOT",
+    Default = false,
+    Callback = function(state)
+        Config.AutoUpgradeSlots = state
+        saveConfig()
+        if state or Config.AutoUpgradeLuck or Config.AutoUpgradeInventory or Config.AutoUpgradeGold then
             Cupie:StartLoop("AutoStatsLoop", 1.0, function()
                 executeStatUpgrades()
             end)

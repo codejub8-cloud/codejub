@@ -1897,7 +1897,7 @@ local Config = {
     -- Combat & Farming
     AutoFight           = false,
     FastAttackAura      = false,
-    AttackSpeed         = 0.08,
+    AttackSpeed         = 0.15,
     AutoWaveSkip        = true,
     
     -- Quests & Rewards
@@ -3986,6 +3986,18 @@ UpgradeTab:CreateToggle({
 local CombatTab = Window:CreateTab("Combat", 4)
 CombatTab:CreateHeader("Combat Automation & Battle Loop", 1)
 
+local isFighting = false
+
+if FightFolder then
+    local battleEnded = FightFolder:FindFirstChild("Ended") or FightFolder:FindFirstChild("BattleEnded") or FightFolder:FindFirstChild("Finish")
+    if battleEnded then
+        Cupie:AddConnection(battleEnded.OnClientEvent:Connect(function()
+            isFighting = false
+            Log("Info", "Battle finished, ready for next round.")
+        end))
+    end
+end
+
 CombatTab:CreateToggle({
     Name = "Auto Fight (Infinite Battles)",
     Description = "Automatically starts battles and advances waves continuously",
@@ -3993,14 +4005,25 @@ CombatTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.AutoFight = state
+        saveConfig()
         if state then
-            Cupie:StartLoop("AutoFightLoop", 1.5, function()
-                if FightStart then FightStart:FireServer("AutoPlay") end
-                if Config.AutoWaveSkip and FightArrived then FightArrived:FireServer() end
+            Cupie:StartLoop("AutoFightLoop", 2.5, function()
+                if not isFighting and FightStart then
+                    FightStart:FireServer("AutoPlay")
+                    isFighting = true
+                    Log("Info", "AutoPlay battle started.")
+                end
+                if Config.AutoWaveSkip and FightArrived then
+                    pcall(function() FightArrived:FireServer() end)
+                end
             end)
         else
             Cupie:StopLoop("AutoFightLoop")
-            if FightStart then FightStart:FireServer("Stop") end
+            if FightStart then
+                FightStart:FireServer("Stop")
+                isFighting = false
+                Log("Info", "Combat halted.")
+            end
         end
     end
 })
@@ -4012,6 +4035,7 @@ CombatTab:CreateToggle({
     Default = false,
     Callback = function(state)
         Config.FastAttackAura = state
+        saveConfig()
         if state then
             Cupie:StartLoop("AutoAttackLoop", Config.AttackSpeed, function()
                 if FlexAttack then FlexAttack:FireServer() end
@@ -4024,14 +4048,15 @@ CombatTab:CreateToggle({
 
 CombatTab:CreateSlider({
     Name = "Attack Hit Rate",
-    Description = "Interval between attack strikes (seconds)",
-    Min = 0.04,
+    Description = "Interval between attack strikes (seconds) - 0.05s to 0.50s",
+    Min = 0.05,
     Max = 0.50,
-    Default = 0.08,
+    Default = 0.15,
     Decimals = 2,
     Suffix = "s",
     Callback = function(val)
         Config.AttackSpeed = val
+        saveConfig()
         if Config.FastAttackAura then
             Cupie:StopLoop("AutoAttackLoop")
             Cupie:StartLoop("AutoAttackLoop", Config.AttackSpeed, function()

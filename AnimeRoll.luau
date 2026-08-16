@@ -1957,7 +1957,64 @@ end
 -- ══════════════════════════════════════════════════════════
 
 local function cleanAllExistingNotifications()
-    -- Intentionally non-destructive to preserve all game HUD buttons (Pass, Shop, Upgrades, Gold HUD)
+    pcall(function()
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if not playerGui then return end
+        
+        for _, gui in ipairs(playerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Name ~= "CUPIEUI" and gui.Enabled then
+                for _, child in ipairs(gui:GetDescendants()) do
+                    if child:IsA("TextLabel") or child:IsA("Frame") then
+                        local name = child.Name:lower()
+                        local text = child:IsA("TextLabel") and child.Text:lower() or ""
+                        
+                        local isPopup = (
+                            name:find("popup") or 
+                            name:find("notif") or 
+                            name:find("toast") or 
+                            name:find("alert") or 
+                            name:find("message") or 
+                            name:find("reward") or 
+                            name:find("claim") or 
+                            text:find("rolled") or 
+                            text:find("claimed") or 
+                            text:find("reward") or 
+                            text:find("success") or 
+                            text:find("got") or 
+                            text:find("rare") or 
+                            text:find("epic") or 
+                            text:find("legendary") or 
+                            text:find("mythic") or 
+                            text:find("secret") or 
+                            text:find("god") or 
+                            text:find("limited") or 
+                            (child.Parent and child.Parent.Name:lower():find("popup"))
+                        )
+                        
+                        local isProtected = (
+                            child.Parent and 
+                            (child.Parent.Name:lower():find("shop") or
+                             child.Parent.Name:lower():find("pass") or
+                             child.Parent.Name:lower():find("upgrade") or
+                             child.Parent.Name:lower():find("gold") or
+                             child.Parent.Name:lower():find("hud") or
+                             child.Parent.Name:lower():find("main") or
+                             child.Parent.Name:lower():find("bar"))
+                        )
+                        
+                        if isPopup and not isProtected then
+                            if child:IsA("TextLabel") then
+                                child.Visible = false
+                                child.TextTransparency = 1
+                            elseif child:IsA("Frame") then
+                                child.Visible = false
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
 end
 
 -- ══════════════════════════════════════════════════════════
@@ -2437,6 +2494,22 @@ end, 2.5)
 
 local function executeAutoSell()
     throttledAutoSell()
+end
+
+-- Auto Pickup All Units (Verified from foranimell.lua: UpdateInventory:FireServer("PickupAll"))
+local function autoPickupAll()
+    if CharactersInv then
+        pcall(function() CharactersInv:FireServer("PickupAll") end)
+    end
+end
+
+-- Auto Faction Quests (จาก Spy Log: FactionUpdate:FireServer("RequestQuestData"))
+local function autoFactionQuests()
+    if FactionUpdate then
+        pcall(function() FactionUpdate:FireServer("RequestQuestData") end)
+        pcall(function() FactionUpdate:FireServer("RequestFactionScores") end)
+        pcall(function() FactionUpdate:FireServer("RequestFactionRanks") end)
+    end
 end
 
 -- ══════════════════════════════════════════════════════════

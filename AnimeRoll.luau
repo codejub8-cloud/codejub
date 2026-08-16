@@ -496,7 +496,7 @@ function Cupie:CreateWindow(config)
     -- Stats Widget (FPS & Ping)
     local statsLabel = Instance.new("TextLabel")
     statsLabel.AutoLocalize = false
-    statsLabel.Text = "🟢 60 FPS • 0ms"
+    statsLabel.Text = "🔄 BOOTING..."
     statsLabel.Font = Enum.Font.GothamMedium
     statsLabel.TextSize = 10
     statsLabel.TextColor3 = Cupie.C.dim
@@ -508,23 +508,32 @@ function Cupie:CreateWindow(config)
     statsLabel.Parent = titleBar
     Cupie:RegisterTheme(statsLabel, "TextColor3", "dim")
 
-    -- Live Performance Update Loop
-    local fpsCount = 60
+    -- Live Performance Update Loop (2s Interval + Real FPS Calculation)
+    local fpsCount = 0
     local fCount = 0
     local lastT = tick()
+    local isFirstUpdate = true
+
     Cupie:AddConnection(RunService.RenderStepped:Connect(function()
         fCount = fCount + 1
         local now = tick()
-        if now - lastT >= 1 then
-            fpsCount = fCount
+        local dt = now - lastT
+        if dt >= 2 then
+            fpsCount = math.floor(fCount / dt + 0.5)
             fCount = 0
             lastT = now
-            local dot = (fpsCount >= 50 and "🟢 ") or (fpsCount >= 30 and "🟡 ") or "🔴 "
-            local pingVal = 0
-            pcall(function()
-                pingVal = math.floor(LocalPlayer:GetNetworkPing() * 1000)
-            end)
-            statsLabel.Text = dot .. tostring(fpsCount) .. " FPS • " .. tostring(pingVal) .. "ms"
+            
+            if isFirstUpdate or fpsCount == 0 then
+                statsLabel.Text = "🔄 BOOTING..."
+                isFirstUpdate = false
+            else
+                local dot = (fpsCount >= 50 and "🟢 ") or (fpsCount >= 30 and "🟡 ") or "🔴 "
+                local pingVal = 0
+                pcall(function()
+                    pingVal = math.floor(LocalPlayer:GetNetworkPing() * 1000)
+                end)
+                statsLabel.Text = dot .. tostring(fpsCount) .. " FPS • " .. tostring(pingVal) .. "ms"
+            end
         end
     end))
 
@@ -3450,7 +3459,7 @@ task.spawn(function()
     local startTime = os.time()
     updateDashboardStats(startTime)
     while true do
-        task.wait(2.0)
+        task.wait(3.0)
         pcall(function()
             updateDashboardStats(startTime)
         end)
@@ -3552,7 +3561,7 @@ GachaTab:CreateToggle({
         Config.AutoRoll = state
         if state then
             smoothPositionToRollPad()
-            Cupie:StartLoop("AutoRollLoop", 0.3, function()
+            Cupie:StartLoop("AutoRollLoop", 0.5, function()
                 performAutoRollStep()
             end)
         else
@@ -3817,7 +3826,7 @@ UpgradeTab:CreateToggle({
         Config.AutoUpgradeLuck = state
         saveConfig()
         if state or Config.AutoUpgradeInventory or Config.AutoUpgradeGold or Config.AutoUpgradeSlots then
-            Cupie:StartLoop("AutoStatsLoop", 1.0, function()
+            Cupie:StartLoop("AutoStatsLoop", 2.0, function()
                 executeStatUpgrades()
             end)
         else
@@ -3836,7 +3845,7 @@ UpgradeTab:CreateToggle({
         Config.AutoUpgradeInventory = state
         saveConfig()
         if state or Config.AutoUpgradeLuck or Config.AutoUpgradeGold or Config.AutoUpgradeSlots then
-            Cupie:StartLoop("AutoStatsLoop", 1.0, function()
+            Cupie:StartLoop("AutoStatsLoop", 2.0, function()
                 executeStatUpgrades()
             end)
         else
@@ -3855,7 +3864,7 @@ UpgradeTab:CreateToggle({
         Config.AutoUpgradeGold = state
         saveConfig()
         if state or Config.AutoUpgradeLuck or Config.AutoUpgradeInventory or Config.AutoUpgradeSlots then
-            Cupie:StartLoop("AutoStatsLoop", 1.0, function()
+            Cupie:StartLoop("AutoStatsLoop", 2.0, function()
                 executeStatUpgrades()
             end)
         else
@@ -3874,7 +3883,7 @@ UpgradeTab:CreateToggle({
         Config.AutoUpgradeSlots = state
         saveConfig()
         if state or Config.AutoUpgradeLuck or Config.AutoUpgradeInventory or Config.AutoUpgradeGold then
-            Cupie:StartLoop("AutoStatsLoop", 1.0, function()
+            Cupie:StartLoop("AutoStatsLoop", 2.0, function()
                 executeStatUpgrades()
             end)
         else

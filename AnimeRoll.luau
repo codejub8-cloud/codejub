@@ -2620,86 +2620,66 @@ end
 
 
 local function getCurrentPlayerGold()
-    -- 1. Direct DataServiceClient Live Memory Access
-    local dsGold = nil
-    pcall(function()
-        local dsClientMod = ReplicatedStorage:FindFirstChild("Data") 
-            and ReplicatedStorage.Data:FindFirstChild("DataService") 
-            and (ReplicatedStorage.Data.DataService:FindFirstChild("DataServiceClient") or ReplicatedStorage.Data.DataService:FindFirstChild("Data"))
-        if dsClientMod then
-            local ds = require(dsClientMod)
-            if type(ds) == "table" then
-                if ds._data and type(ds._data) == "table" then
-                    if ds._data._data and type(ds._data._data.Gold) == "number" then
-                        dsGold = ds._data._data.Gold
-                    elseif type(ds._data.Gold) == "number" then
-                        dsGold = ds._data.Gold
+    -- 1. ตรวจสอบ leaderstats (ตรงที่สุด)
+    local ls = LocalPlayer:FindFirstChild("leaderstats")
+    if ls then
+        for _, child in ipairs(ls:GetChildren()) do
+            local name = child.Name:lower()
+            if (name:find("gold") or name:find("coin") or name:find("money") or name:find("cash")) and child:IsA("NumberValue") then
+                return child.Value
+            end
+        end
+    end
+
+    -- 2. ตรวจสอบ Attribute ของ LocalPlayer
+    local attrs = LocalPlayer:GetAttributes()
+    if attrs.Gold and tonumber(attrs.Gold) then
+        return tonumber(attrs.Gold)
+    end
+    if attrs.Coins and tonumber(attrs.Coins) then
+        return tonumber(attrs.Coins)
+    end
+    if attrs.Money and tonumber(attrs.Money) then
+        return tonumber(attrs.Money)
+    end
+
+    -- 3. ตรวจสอบโฟลเดอร์ Data / PlayerData
+    for _, fName in ipairs({"Data", "PlayerData", "Stats"}) do
+        local folder = LocalPlayer:FindFirstChild(fName)
+        if folder then
+            -- ตรวจสอบ ValueBase
+            for _, child in ipairs(folder:GetChildren()) do
+                if child:IsA("NumberValue") or child:IsA("ValueBase") then
+                    local n = child.Name:lower()
+                    if (n:find("gold") or n:find("coin") or n:find("money") or n:find("cash")) and tonumber(child.Value) then
+                        return tonumber(child.Value)
                     end
-                elseif ds.client and ds.client._data and type(ds.client._data._data) == "table" and type(ds.client._data._data.Gold) == "number" then
-                    dsGold = ds.client._data._data.Gold
-                elseif type(ds.Gold) == "number" then
-                    dsGold = ds.Gold
                 end
             end
-        end
-    end)
-    if dsGold and type(dsGold) == "number" and dsGold >= 0 then
-        return dsGold
-    end
-
-    -- 2. Direct ReplicatedStorage DataService Client get()
-    pcall(function()
-        local dsMod = ReplicatedStorage:FindFirstChild("Data") and ReplicatedStorage.Data:FindFirstChild("DataService")
-        if dsMod then
-            local ds = require(dsMod)
-            local client = (type(ds) == "table" and (ds.client or ds.Client or ds)) or ds
-            if client and client.get then
-                local res = client:get(LocalPlayer, {"Gold"}) or client:get({"Gold"})
-                if type(res) == "number" then dsGold = res end
-            end
-        end
-    end)
-    if dsGold and type(dsGold) == "number" and dsGold >= 0 then
-        return dsGold
-    end
-
-    -- 3. LocalPlayer Data / leaderstats / Attributes
-    local pAttrGold = LocalPlayer:GetAttribute("Gold") or LocalPlayer:GetAttribute("Coins") or LocalPlayer:GetAttribute("Money")
-    if pAttrGold and tonumber(pAttrGold) ~= nil then
-        return tonumber(pAttrGold)
-    end
-
-    for _, fName in ipairs({"Data", "leaderstats", "PlayerData", "Stats"}) do
-        local dFolder = LocalPlayer:FindFirstChild(fName)
-        if dFolder then
-            for _, gName in ipairs({"Gold", "Coins", "Money", "Cash"}) do
-                local gVal = dFolder:FindFirstChild(gName)
-                if gVal and gVal:IsA("ValueBase") and tonumber(gVal.Value) ~= nil then
-                    return tonumber(gVal.Value)
-                end
-            end
-            local fAttr = dFolder:GetAttribute("Gold") or dFolder:GetAttribute("Coins")
-            if fAttr and tonumber(fAttr) ~= nil then
+            -- ตรวจสอบ Attribute ของโฟลเดอร์
+            local fAttr = folder:GetAttribute("Gold") or folder:GetAttribute("Coins") or folder:GetAttribute("Money")
+            if fAttr and tonumber(fAttr) then
                 return tonumber(fAttr)
             end
         end
     end
 
-    -- 4. Strictly Scoped TopBar HUD TextLabel (Excludes Shop, Products, Gamepasses, Upgrades)
+    -- 4. สุดท้าย: สแกน HUD แต่จำกัดเฉพาะ GUI ที่ไม่เกี่ยวกับ Shop/Pass/Upgrade
     local pGui = LocalPlayer:FindFirstChild("PlayerGui")
     if pGui then
         for _, gui in ipairs(pGui:GetChildren()) do
             if gui:IsA("ScreenGui") and gui.Name ~= "CUPIEUI" and gui.Enabled then
                 local gName = gui.Name:lower()
-                if not gName:find("shop") and not gName:find("pass") and not gName:find("product") and not gName:find("upgr") and not gName:find("trade") then
+                -- ข้าม GUI ที่เกี่ยวกับ Shop, Pass, Product, Upgrade
+                if not gName:find("shop") and not gName:find("pass") and not gName:find("product") and not gName:find("upgr") then
                     for _, lbl in ipairs(gui:GetDescendants()) do
-                        if lbl:IsA("TextLabel") and lbl.Visible then
+                        if lbl:IsA("TextLabel") and lbl.Visible and lbl.Text:match("%d") then
                             local lName = lbl.Name:lower()
                             local pName = (lbl.Parent and lbl.Parent.Name:lower()) or ""
                             if not pName:find("shop") and not pName:find("product") and not pName:find("cost") and not pName:find("price") then
-                                if (lName == "gold" or lName == "coins" or lName == "money" or pName == "gold" or pName == "coins") and lbl.Text:match("%d") then
+                                if (lName:find("gold") or lName:find("coin") or lName:find("money") or pName:find("gold") or pName:find("coins")) then
                                     local parsed = parseFormattedNumber(lbl.Text)
-                                    if parsed >= 0 then return parsed end
+                                    if parsed and parsed > 0 then return parsed end
                                 end
                             end
                         end
@@ -2711,7 +2691,6 @@ local function getCurrentPlayerGold()
 
     return 0
 end
-
 
 local function getStandTargetInfo(model)
     if not model or not model:IsA("Model") then return nil end
@@ -2944,18 +2923,60 @@ local function buyStandTarget(target)
 end
 
 local function executeSmartAutoBuy()
-    local targets = getMatchingStandTargets()
-    for _, target in ipairs(targets) do
-        local curGold = getCurrentPlayerGold()
-        local cost = target.Cost or 200
-        if curGold >= cost then
-            buyStandTarget(target)
-            task.wait(0.08)
+    if not CharactersBuy then 
+        -- พยายามหา remote ใหม่ถ้ายังไม่มี
+        pcall(function()
+            CharactersBuy = ReplicatedStorage:FindFirstChild("Remotes") 
+                and ReplicatedStorage.Remotes:FindFirstChild("Characters") 
+                and ReplicatedStorage.Remotes.Characters:FindFirstChild("Buy")
+        end)
+        if not CharactersBuy then 
+            Log("Warning", "CharactersBuy remote not found!")
+            return 
         end
     end
-    return #targets
-end
 
+    -- กำหนด Tier ที่จะซื้อ
+    local tiers = {}
+    if Config.SelectedTier == "All" or Config.SelectedTier == "All Tiers" then
+        tiers = {1, 2, 3, 4}
+    elseif Config.SelectedTier then
+        tiers = {Config.SelectedTier}
+    else
+        tiers = {1, 2, 3, 4} -- fallback
+    end
+
+    -- กำหนด Slot ที่จะซื้อ
+    local slots = {}
+    local slotStr = Config.SelectedSlot or "All Slots"
+    if slotStr == "All Slots" then
+        slots = {1, 2, 3}
+    elseif slotStr == "Slot 1" then
+        slots = {1}
+    elseif slotStr == "Slot 2" then
+        slots = {2}
+    elseif slotStr == "Slot 3" then
+        slots = {3}
+    else
+        slots = {1, 2, 3}
+    end
+
+    -- วนลูปซื้อตาม Tier และ Slot
+    for _, tier in ipairs(tiers) do
+        for _, slot in ipairs(slots) do
+            local gold = getCurrentPlayerGold()
+            -- ถ้าเงินน้อยกว่า 200 ให้หยุด (หรือปรับตามราคาขั้นต่ำ)
+            if gold < 200 then
+                Log("Warning", "Not enough gold to buy tier %d slot %d (have %d)", tier, slot, gold)
+                return
+            end
+            pcall(function()
+                CharactersBuy:FireServer(tier, slot)
+                task.wait(randomDelay(0.06, 0.03))
+            end)
+        end
+    end
+end
 
 -- Auto Upgrade Stats Loop (Verified from foranimell.lua: Upgrade:FireServer("Gold", "Luck" / "Inventory" / "Gold" / "Slots"))
 local function executeStatUpgrades()

@@ -3458,19 +3458,22 @@ GachaTab:CreateToggle({
     end
 })
 
-GachaTab:CreateDropdown({
-    Name = "Auto Sell Up To Rarity",
-    Description = "Select maximum rarity to automatically sell for Gold",
+GachaTab:CreateMultiDropdown({
+    Name = "Auto Sell - Rarity Filter (Multi-Select)",
+    Description = "Select specific Rarities to automatically sell for Gold",
     Options = {
-        "Common Only",
-        "Up to Rare (Common + Rare)",
-        "Up to Epic (Common + Rare + Epic)",
-        "Up to Legendary",
-        "Disabled"
+        "Common",
+        "Rare",
+        "Epic",
+        "Legendary",
+        "Mythic",
+        "Secret",
+        "God",
+        "Limited"
     },
-    Default = "Common Only",
-    Callback = function(choice)
-        Config.SellThreshold = choice
+    Default = Config.SelectedSellRarities,
+    Callback = function(selMap)
+        Config.SelectedSellRarities = selMap
     end
 })
 

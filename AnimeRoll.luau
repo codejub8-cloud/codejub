@@ -1883,11 +1883,15 @@ local Config = {
     -- Auto Pickup
     AutoPickupAll       = false,
     
-    -- Team Progression
+    -- Team Progression & Upgrades
     AutoEquipBest       = false,
     AutoLevelUp         = false,
     AutoEvolve          = false,
     AutoUpgradeStats    = false,
+    AutoUpgradeLuck     = true,
+    AutoUpgradeInventory = true,
+    AutoUpgradeGold     = true,
+    AutoUpgradeSlots    = true,
     AutoTraitReroll     = false,
     
     -- Combat & Farming
